@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Trash2, Calendar, ListTodo, Loader2 } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Trash2, Calendar, ListTodo, Loader2, Eye } from 'lucide-react';
 
 export type ExtractedDeadline = {
   name: string;
@@ -11,6 +11,7 @@ export type ExtractedDeadline = {
   project_id: string | null;
   project_name?: string;
   source_sticker_index: number;
+  visible_to?: string[] | null;
 };
 
 export type ExtractedTask = {
@@ -134,6 +135,46 @@ const ExtractionConfirmDialog: React.FC<Props> = ({
                         ))}
                       </SelectContent>
                     </Select>
+                    {/* Visible to persons */}
+                    <div className="space-y-1">
+                      <button
+                        type="button"
+                        className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground"
+                        onClick={() => {
+                          if (d.visible_to) {
+                            updateDeadline(i, { visible_to: null });
+                          } else {
+                            updateDeadline(i, { visible_to: [] });
+                          }
+                        }}
+                      >
+                        <Eye className="h-3 w-3" />
+                        {d.visible_to ? 'Limit visibility' : 'Visible to all (click to limit)'}
+                      </button>
+                      {d.visible_to !== null && d.visible_to !== undefined && (
+                        <div className="border rounded p-1.5 space-y-1 max-h-24 overflow-y-auto bg-background">
+                          {users.length === 0 && (
+                            <span className="text-[10px] text-muted-foreground">No users available</span>
+                          )}
+                          {users.map(u => (
+                            <label key={u.id} className="flex items-center gap-1.5 text-[10px] cursor-pointer">
+                              <Checkbox
+                                checked={d.visible_to?.includes(u.id) ?? false}
+                                onCheckedChange={(checked) => {
+                                  const current = d.visible_to || [];
+                                  const next = checked
+                                    ? [...current, u.id]
+                                    : current.filter(id => id !== u.id);
+                                  updateDeadline(i, { visible_to: next });
+                                }}
+                                className="h-3 w-3"
+                              />
+                              {u.name}
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                     <span className="text-[10px] text-muted-foreground">From sticker #{d.source_sticker_index}</span>
                   </div>
                 ))}

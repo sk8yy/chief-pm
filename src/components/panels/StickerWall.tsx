@@ -158,8 +158,9 @@ const StickerWall: React.FC = () => {
 
   /* ── save extracted items ── */
   const handleConfirmExtraction = async (deadlines: ExtractedDeadline[], tasks: ExtractedTask[]) => {
-    if (!currentUserId) {
-      toast.error('Please select a user first.');
+    const effectiveUserId = currentUserId || users?.[0]?.id;
+    if (!effectiveUserId) {
+      toast.error('No users available.');
       return;
     }
     setIsSavingExtraction(true);
@@ -174,7 +175,7 @@ const StickerWall: React.FC = () => {
             name: d.name,
             date: d.date,
             project_id: d.project_id!,
-            created_by: currentUserId,
+            created_by: effectiveUserId,
             type: 'project' as const,
             visible_to: d.visible_to?.length ? d.visible_to : null,
           }));
@@ -194,7 +195,7 @@ const StickerWall: React.FC = () => {
           .map(t => ({
             description: t.description,
             project_id: t.project_id!,
-            user_id: t.user_id || currentUserId,
+            user_id: t.user_id || effectiveUserId,
             week_start: weekStart,
             is_planned: true,
             is_completed: false,

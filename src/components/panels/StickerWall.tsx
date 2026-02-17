@@ -300,7 +300,7 @@ const StickerWall: React.FC = () => {
       </Dialog>
 
       {/* edit dialog */}
-      <Dialog open={!!editingSticker} onOpenChange={(open) => { if (!open) setEditingSticker(null); }}>
+      <Dialog open={!!editingSticker && !showCreateProject} onOpenChange={(open) => { if (!open) setEditingSticker(null); }}>
         <DialogContent className="sm:max-w-lg" style={dialogBg(editingSticker)}>
           <DialogHeader>
             <DialogTitle>Edit Sticker</DialogTitle>

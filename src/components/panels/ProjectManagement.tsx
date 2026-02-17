@@ -21,7 +21,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import CreateProjectDialog from './CreateProjectDialog';
 
 const ProjectManagement = () => {
-  const { mode } = useAppContext();
+  const { mode, workspaceId } = useAppContext();
   const qc = useQueryClient();
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -132,7 +132,8 @@ const ProjectManagement = () => {
         project_id: row.project_id,
         date: row.date,
         ...updatePayload,
-      }, { onConflict: 'user_id,project_id,date' });
+        workspace_id: workspaceId!,
+      } as any, { onConflict: 'user_id,project_id,date' });
     }
     qc.invalidateQueries({ queryKey: ['all_hours'] });
   }, [selectedProjectId, qc]);
@@ -148,9 +149,10 @@ const ProjectManagement = () => {
         project_id: selectedProjectId,
         date: format(day, 'yyyy-MM-dd'),
         planned_hours: 0,
+        workspace_id: workspaceId!,
       }));
     });
-    await supabase.from('hours').upsert(rows, { onConflict: 'user_id,project_id,date', ignoreDuplicates: true });
+    await supabase.from('hours').upsert(rows as any, { onConflict: 'user_id,project_id,date', ignoreDuplicates: true });
     // Also create assignment records for all visible weeks
     const weekStarts = weeks.map((ws) => format(ws, 'yyyy-MM-dd'));
     assignMemberMut.mutate({

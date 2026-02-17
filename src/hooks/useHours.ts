@@ -1,17 +1,21 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAppContext } from '@/contexts/AppContext';
 
 export function useHours(userId: string | null, dateRange: { start: string; end: string }) {
+  const { workspaceId } = useAppContext();
   return useQuery({
-    queryKey: ['hours', userId, dateRange.start, dateRange.end],
+    queryKey: ['hours', userId, dateRange.start, dateRange.end, workspaceId],
     queryFn: async () => {
       if (!userId) return [];
-      const { data, error } = await supabase
+      let q = supabase
         .from('hours')
         .select('*')
         .eq('user_id', userId)
         .gte('date', dateRange.start)
         .lte('date', dateRange.end);
+      if (workspaceId) q = q.eq('workspace_id', workspaceId);
+      const { data, error } = await q;
       if (error) throw error;
       return data;
     },
@@ -21,6 +25,7 @@ export function useHours(userId: string | null, dateRange: { start: string; end:
 
 export function useUpsertHours() {
   const qc = useQueryClient();
+  const { workspaceId } = useAppContext();
   return useMutation({
     mutationFn: async (params: {
       user_id: string;
@@ -29,7 +34,6 @@ export function useUpsertHours() {
       planned_hours?: number;
       recorded_hours?: number | null;
     }) => {
-      // Check if entry exists
       const { data: existing } = await supabase
         .from('hours')
         .select('id')
@@ -51,7 +55,8 @@ export function useUpsertHours() {
           date: params.date,
           planned_hours: params.planned_hours ?? 0,
           recorded_hours: params.recorded_hours ?? null,
-        });
+          workspace_id: workspaceId!,
+        } as any);
         if (error) throw error;
       }
     },

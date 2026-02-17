@@ -8,6 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAssignMember } from '@/hooks/useAssignments';
 import { format, startOfWeek } from 'date-fns';
+import { useAppContext } from '@/contexts/AppContext';
 
 interface Discipline {
   id: string;
@@ -33,6 +34,7 @@ interface CreateProjectDialogProps {
 }
 
 const CreateProjectDialog = ({ open, onClose, disciplines, users, defaultDisciplineId, onCreated }: CreateProjectDialogProps) => {
+  const { workspaceId } = useAppContext();
   const [name, setName] = useState('');
   const [jobNumber, setJobNumber] = useState('');
   const [disciplineId, setDisciplineId] = useState<string>(defaultDisciplineId ?? '');
@@ -80,7 +82,8 @@ const CreateProjectDialog = ({ open, onClose, disciplines, users, defaultDiscipl
         manager_id: managerId || null,
         start_date: startDate || null,
         end_date: endDate || null,
-      }).select('id').single();
+        workspace_id: workspaceId!,
+      } as any).select('id').single();
 
       if (error || !data) return;
 

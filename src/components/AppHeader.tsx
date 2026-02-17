@@ -1,9 +1,11 @@
+import { useNavigate } from 'react-router-dom';
 import { useAppContext, PanelType } from '@/contexts/AppContext';
 import { useUsers } from '@/hooks/useUsers';
+import { useWorkspaces } from '@/hooks/useWorkspaces';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { LayoutDashboard, Calendar, FolderKanban, StickyNote } from 'lucide-react';
+import { LayoutDashboard, Calendar, FolderKanban, StickyNote, LogOut } from 'lucide-react';
 
 const panels: { key: PanelType; label: string; icon: React.ReactNode }[] = [
   { key: 'sticker', label: 'Sticker Wall', icon: <StickyNote className="h-4 w-4" /> },
@@ -13,11 +15,26 @@ const panels: { key: PanelType; label: string; icon: React.ReactNode }[] = [
 ];
 
 const AppHeader = () => {
-  const { activePanel, setActivePanel, mode, setMode, currentUserId, setCurrentUserId } = useAppContext();
+  const navigate = useNavigate();
+  const { activePanel, setActivePanel, mode, setMode, currentUserId, setCurrentUserId, workspaceId } = useAppContext();
   const { data: users } = useUsers();
+  const { data: workspaces } = useWorkspaces();
+  const currentWorkspace = workspaces?.find(w => w.id === workspaceId);
 
   return (
     <header className="flex items-center justify-between border-b bg-card px-4 py-2 gap-4">
+      <div className="flex items-center gap-2">
+        <Button variant="ghost" size="sm" onClick={() => navigate('/')} className="gap-1.5">
+          <LogOut className="h-4 w-4" />
+          <span className="hidden sm:inline">Exit</span>
+        </Button>
+        {currentWorkspace && (
+          <span className="text-sm font-medium text-muted-foreground border-l pl-2 ml-1">
+            {currentWorkspace.name}
+          </span>
+        )}
+      </div>
+
       <nav className="flex items-center gap-1">
         {panels.map((p) => (
           <Button

@@ -369,28 +369,30 @@ const DisciplineOverview = () => {
                               return (
                                 <div
                                   key={ws.toISOString()}
-                                  className="px-1 py-1 border-r min-h-[44px] relative group flex flex-col items-center justify-center"
+                                  className="px-1 py-1 border-r min-h-[52px] relative group flex flex-col items-center justify-center gap-1"
                                   onMouseEnter={() => setHoveredCell(cellKey)}
                                   onMouseLeave={() => setHoveredCell(null)}
                                 >
                                   {/* Stickers */}
-                                  <div className="flex flex-wrap gap-1 justify-center items-center">
-                                    {stickers.map((s) => (
-                                      <MemberSticker
-                                        key={s.userId}
-                                        userName={s.userName}
-                                        hours={s.hours}
-                                        disciplineId={s.disciplineId}
-                                        onDelete={() => deleteStickerHours(s.userId, project.id, ws)}
-                                        onCopy={() => setClipboard({ userId: s.userId, hours: s.hours })}
-                                        onEditHours={(newHours) => upsertStickerHours(s.userId, project.id, ws, newHours)}
-                                      />
-                                    ))}
-                                  </div>
+                                  {stickers.length > 0 && (
+                                    <div className="flex flex-wrap gap-1.5 justify-center items-center">
+                                      {stickers.map((s) => (
+                                        <MemberSticker
+                                          key={s.userId}
+                                          userName={s.userName}
+                                          hours={s.hours}
+                                          disciplineId={s.disciplineId}
+                                          onDelete={() => deleteStickerHours(s.userId, project.id, ws)}
+                                          onCopy={() => setClipboard({ userId: s.userId, hours: s.hours })}
+                                          onEditHours={(newHours) => upsertStickerHours(s.userId, project.id, ws, newHours)}
+                                        />
+                                      ))}
+                                    </div>
+                                  )}
 
                                   {/* Hover buttons: Add + Paste */}
                                   {isHovered && (
-                                    <div className="flex gap-1 mt-0.5 justify-center">
+                                    <div className="flex gap-1 justify-center">
                                       <button
                                         className="flex items-center gap-0.5 text-[9px] text-muted-foreground hover:text-foreground bg-muted/60 hover:bg-muted rounded px-1.5 py-0.5 transition-colors"
                                         onClick={(e) => {
@@ -412,6 +414,19 @@ const DisciplineOverview = () => {
                                         </button>
                                       )}
                                     </div>
+                                  )}
+
+                                  {/* Add member popover anchored to this cell */}
+                                  {addDialogTarget?.projectId === project.id && addDialogTarget?.weekStart.getTime() === ws.getTime() && (
+                                    <AddMemberDialog
+                                      open={true}
+                                      onClose={() => setAddDialogTarget(null)}
+                                      onConfirm={(userId, hrs) => {
+                                        upsertStickerHours(userId, project.id, ws, hrs);
+                                        setAddDialogTarget(null);
+                                      }}
+                                      availableUsers={users ?? []}
+                                    />
                                   )}
                                 </div>
                               );
@@ -626,18 +641,6 @@ const DisciplineOverview = () => {
         );
       })}
 
-      {/* Add member dialog */}
-      <AddMemberDialog
-        open={!!addDialogTarget}
-        onClose={() => setAddDialogTarget(null)}
-        onConfirm={(userId, hours) => {
-          if (addDialogTarget) {
-            upsertStickerHours(userId, addDialogTarget.projectId, addDialogTarget.weekStart, hours);
-            setAddDialogTarget(null);
-          }
-        }}
-        availableUsers={users ?? []}
-      />
 
       {/* Clipboard indicator */}
       {clipboard && (

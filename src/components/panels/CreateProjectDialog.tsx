@@ -40,6 +40,7 @@ const CreateProjectDialog = ({ open, onClose, disciplines, users, defaultDiscipl
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
   const qc = useQueryClient();
   const assignMemberMut = useAssignMember();
@@ -68,34 +69,39 @@ const CreateProjectDialog = ({ open, onClose, disciplines, users, defaultDiscipl
   };
 
   const handleCreate = async () => {
-    if (!name.trim()) return;
+    if (!name.trim() || isSubmitting) return;
+    setIsSubmitting(true);
 
-    const { data, error } = await supabase.from('projects').insert({
-      name: name.trim(),
-      job_number: jobNumber.trim() || 'xxxxxx-xx',
-      discipline_id: disciplineId || null,
-      manager_id: managerId || null,
-      start_date: startDate || null,
-      end_date: endDate || null,
-    }).select('id').single();
+    try {
+      const { data, error } = await supabase.from('projects').insert({
+        name: name.trim(),
+        job_number: jobNumber.trim() || 'xxxxxx-xx',
+        discipline_id: disciplineId || null,
+        manager_id: managerId || null,
+        start_date: startDate || null,
+        end_date: endDate || null,
+      }).select('id').single();
 
-    if (error || !data) return;
+      if (error || !data) return;
 
-    // Assign selected members for the current week
-    if (selectedMembers.size > 0) {
-      const currentWeekStart = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
-      for (const userId of selectedMembers) {
-        assignMemberMut.mutate({
-          user_id: userId,
-          project_id: data.id,
-          week_starts: [currentWeekStart],
-        });
+      // Assign selected members for the current week
+      if (selectedMembers.size > 0) {
+        const currentWeekStart = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
+        for (const userId of selectedMembers) {
+          assignMemberMut.mutate({
+            user_id: userId,
+            project_id: data.id,
+            week_starts: [currentWeekStart],
+          });
+        }
       }
-    }
 
-    qc.invalidateQueries({ queryKey: ['projects'] });
-    onCreated?.(data.id);
-    onClose();
+      qc.invalidateQueries({ queryKey: ['projects'] });
+      onCreated?.(data.id);
+      onClose();
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Group users by discipline for the member selector
@@ -208,9 +214,9 @@ const CreateProjectDialog = ({ open, onClose, disciplines, users, defaultDiscipl
 
         {/* Footer */}
         <div className="px-4 py-3 border-t flex justify-end gap-2">
-          <Button variant="ghost" size="sm" onClick={onClose}>Cancel</Button>
-          <Button size="sm" disabled={!name.trim()} onClick={handleCreate}>
-            Create Project
+          <Button variant="ghost" size="sm" onClick={onClose} disabled={isSubmitting}>Cancel</Button>
+          <Button size="sm" disabled={!name.trim() || isSubmitting} onClick={handleCreate}>
+            {isSubmitting ? 'Creating…' : 'Create Project'}
           </Button>
         </div>
       </div>

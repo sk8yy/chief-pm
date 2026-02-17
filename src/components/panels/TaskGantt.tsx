@@ -362,6 +362,8 @@ const TaskGantt: React.FC<Props> = ({ tasks, projectId, projectName, users, onTo
             if (hasDates) {
               blockStart = hasStart ? Math.max(0, getDateCol(primaryTask.start_date!)) : 0;
               blockEnd = hasEnd ? Math.min(totalDays - 1, getDateCol(primaryTask.end_date!)) : blockStart;
+              // Ensure single-day tasks still render with at least 1 day width
+              if (blockEnd < blockStart) blockEnd = blockStart;
             }
 
             const isDragging = dragTask?.taskId === primaryTask.id;

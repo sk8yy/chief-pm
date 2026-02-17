@@ -61,3 +61,14 @@ export function useDeleteDeadline() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['deadlines'] }),
   });
 }
+
+export function useUpdateDeadlineCategory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, category }: { id: string; category: string }) => {
+      const { error } = await supabase.from('deadlines').update({ category } as any).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['deadlines'] }),
+  });
+}

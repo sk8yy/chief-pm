@@ -5,7 +5,7 @@ import { useProjects, useUpdateProject } from '@/hooks/useProjects';
 import { useDisciplines } from '@/hooks/useDisciplines';
 import { useUsers } from '@/hooks/useUsers';
 import { useAllHours } from '@/hooks/useAllHours';
-import { useProjectDeadlines, useAddDeadline, useDeleteDeadline } from '@/hooks/useDeadlines';
+import { useProjectDeadlines, useAddDeadline, useDeleteDeadline, useUpdateDeadlineCategory } from '@/hooks/useDeadlines';
 import { DEADLINE_CATEGORIES, autoCategorize, getCategoryMeta, DeadlineCategory } from '@/lib/deadlineCategories';
 import { useProjectTasks, useToggleTask } from '@/hooks/useTasks';
 import TaskGantt from './TaskGantt';
@@ -63,6 +63,7 @@ const ProjectManagement = () => {
   const unassignMemberMut = useUnassignMember();
   const addDeadline = useAddDeadline();
   const deleteDeadline = useDeleteDeadline();
+  const updateDeadlineCategory = useUpdateDeadlineCategory();
 
   // Build hours map for selected project
   const hoursMap = useMemo(() => {
@@ -501,12 +502,26 @@ const ProjectManagement = () => {
                     >
                       <X className="h-3 w-3" />
                     </button>
-                    <span
-                      className="text-[10px] font-medium px-1.5 py-0.5 rounded-sm shrink-0"
-                      style={{ backgroundColor: `${cat.color}20`, color: cat.color }}
+                    <Select
+                      value={(d as any).category ?? 'due'}
+                      onValueChange={(v) => updateDeadlineCategory.mutate({ id: d.id, category: v })}
                     >
-                      {cat.short}
-                    </span>
+                      <SelectTrigger className="h-6 text-[10px] w-[120px] px-1.5 py-0">
+                        <span
+                          className="font-medium px-1 py-0 rounded-sm"
+                          style={{ backgroundColor: `${cat.color}20`, color: cat.color }}
+                        >
+                          {cat.short}
+                        </span>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {DEADLINE_CATEGORIES.map(c => (
+                          <SelectItem key={c.value} value={c.value}>
+                            <span className="text-xs">{c.label}</span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <span className="font-medium">{d.name}</span>
                     <span className="text-muted-foreground ml-auto">{format(new Date(d.date), 'dd MMM yyyy')}</span>
                   </div>

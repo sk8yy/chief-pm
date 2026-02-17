@@ -86,7 +86,7 @@ const ExtractionConfirmDialog: React.FC<Props> = ({
           </p>
         </div>
 
-        <ScrollArea className="flex-1 min-h-0 p-4">
+        <div className="flex-1 overflow-y-auto p-4">
           <div className="space-y-4">
             {/* Deadlines */}
             <div>
@@ -205,7 +205,7 @@ const ExtractionConfirmDialog: React.FC<Props> = ({
               </div>
             </div>
           </div>
-        </ScrollArea>
+        </div>
 
         {/* Footer */}
         <div className="px-4 py-3 border-t flex justify-end gap-2">

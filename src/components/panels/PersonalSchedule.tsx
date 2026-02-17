@@ -14,11 +14,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
-import { ChevronLeft, ChevronRight, Plus, Target } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Target, UserPlus } from 'lucide-react';
 import HourCell from './HourCell';
 import HourBlock, { BlockData } from './HourBlock';
 import TimeSummaryTable from './TimeSummaryTable';
 import AddProjectDialog from './AddProjectDialog';
+import AddUserDialog from './AddUserDialog';
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -66,6 +67,7 @@ const PersonalSchedule = () => {
   const { currentUserId, mode } = useAppContext();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [showAddProject, setShowAddProject] = useState(false);
+  const [showAddUser, setShowAddUser] = useState(false);
   const [showAddDeadline, setShowAddDeadline] = useState(false);
   const [deadlineName, setDeadlineName] = useState('');
   const [deadlineDate, setDeadlineDate] = useState('');
@@ -286,6 +288,9 @@ const PersonalSchedule = () => {
           <ChevronRight className="h-4 w-4" />
         </Button>
         <div className="ml-auto flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setShowAddUser(true)}>
+            <UserPlus className="h-3.5 w-3.5 mr-1" /> Add User
+          </Button>
           <Button variant="outline" size="sm" onClick={() => setShowAddDeadline(!showAddDeadline)}>
             <Target className="h-3.5 w-3.5 mr-1" /> Add Deadline
           </Button>
@@ -759,6 +764,13 @@ const PersonalSchedule = () => {
           assignedProjectIds={assignedProjectIds}
         />
       )}
+
+      {/* Add User Dialog */}
+      <AddUserDialog
+        open={showAddUser}
+        onClose={() => setShowAddUser(false)}
+        disciplines={disciplines ?? []}
+      />
     </div>
     </TooltipProvider>
   );

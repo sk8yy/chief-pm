@@ -1,125 +1,129 @@
 
 
-# Multi-Discipline Work Hour Management System
+# Phase 1 Implementation: Foundation, Data Layer, and App Shell
 
-## Overview
-A centralized web app replacing spreadsheet-based work hour tracking. Three role-specific panels share a unified backend, with Plan and Record modes offering parallel data sets for scheduling vs. actuals.
-
----
-
-## Phase 1: Foundation & Data Layer
-
-### Lovable Cloud Backend Setup
-- **Database tables**: Disciplines, Users, Projects, Hours (with planned/recorded fields), Tasks, Deadlines
-- **Default data seeding**: 5 disciplines (Urban Planning, Urban Design, Landscape, Mainland, Leave), 5 default users (Ayaan, Leo, Fischer, Eleen, Gary), 4 default projects with job numbers
-- **Color mapping**: Each discipline gets its signature color family (pink, green, orange, purple, blue)
-
-### App Shell & Navigation
-- **Header bar** with three panel buttons: Discipline Overview, Personal Schedule, Project Management
-- **Plan/Record mode toggle** in the header — Record mode triggers a dark theme across the entire UI
-- **Simple user selector** (no login in v1 — dropdown to pick your identity)
+This phase sets up the Lovable Cloud (Supabase) backend, seeds default data, and builds the app shell with navigation and Plan/Record mode toggle. The Excel screenshots you provided will guide the visual structure of Panel 2 in Phase 2.
 
 ---
 
-## Phase 2: Panel 2 — Personal Work Schedule (Team Member View)
+## Step 1: Enable Lovable Cloud (Supabase)
 
-*Built first as the most interactive panel and core data entry point.*
-
-### Weekly Calendar Grid
-- Monday–Sunday columns, weeks stacked vertically
-- Default view: current month's weeks, with controls to add/remove weeks
-- Discipline-colored project rows grouped by discipline
-
-### Drag-and-Drop Hour Entry (Plan Mode)
-- Drag horizontally across day cells to create a colored hour block for a project
-- Click into block to enter numeric hours
-- Blocks color-coded by discipline color family
-
-### Record Mode Enhancements
-- Existing blocks can be resized and hours edited independently
-- Brackets show difference from planned (e.g., "+2h" / "−1.5h"), green if under/equal, red if over
-- Slightly desaturated block colors to visually distinguish from Plan mode
-
-### Task List per Week
-- Task descriptions next to each week row, grouped by project
-- Plan mode: add/edit task text
-- Record mode: checkbox to mark complete (strikethrough on completion)
-
-### Deadlines
-- Global deadlines shown as small icons on date cells
-- Personal reminders: add local-only deadline entries with a distinct visual style
-
-### Totals & Summary
-- Weekly totals (right of Sunday): Total Hours + OT (anything over 40h)
-- Monthly time booking summary at bottom: Normal Hours vs. OT per project
+Provision the Supabase backend to host all shared data (disciplines, users, projects, hours, tasks, deadlines).
 
 ---
 
-## Phase 3: Panel 1 — Discipline Overview (Team Leader View)
+## Step 2: Database Schema
 
-### Calendar Table Layout
-- Columns: weeks grouped by month (default: 2 months starting from current)
-- Rows: projects under the selected discipline
-- Controls to add/remove visible months
+Create the following tables via SQL migration:
 
-### Project & Team Management
-- Expand a project row to see assigned team members
-- Add/remove users from projects
-- Numeric hour input per user per week
+**disciplines**
+- `id` (uuid, PK), `name` (text), `color` (text -- hex or keyword), `sort_order` (int)
 
-### Deadlines in Grid
-- Add/delete deadlines with name + date per project
-- Small deadline icon appears on the corresponding week cell
+**app_users** (named to avoid conflict with Supabase auth.users)
+- `id` (uuid, PK), `name` (text), `discipline_id` (FK to disciplines)
 
-### Record Mode View
-- Cells show recorded hours with bracketed difference from planned
-- Color-coded: green (on track), red (over)
+**projects**
+- `id` (uuid, PK), `name` (text), `job_number` (text, default 'xxxxxx-xx'), `discipline_id` (FK), `manager_id` (FK to app_users, nullable), `sort_order` (int)
 
-### Cross-Panel Navigation
-- Double-click a project header → jump to Panel 3 for that project
+**hours**
+- `id` (uuid, PK), `user_id` (FK), `project_id` (FK), `date` (date), `planned_hours` (numeric), `recorded_hours` (numeric, nullable)
 
----
+**tasks**
+- `id` (uuid, PK), `description` (text), `project_id` (FK), `user_id` (FK), `week_start` (date), `is_planned` (boolean), `is_completed` (boolean, default false)
 
-## Phase 4: Panel 3 — Project Management (PM View)
+**deadlines**
+- `id` (uuid, PK), `name` (text), `date` (date), `project_id` (FK, nullable), `created_by` (FK to app_users), `type` (text -- 'global' or 'personal')
 
-### Project Selector & Details
-- Dropdown to choose project, with add/edit/delete controls
-- Editable fields: Project Name, Job Number, PM/Coordinator
-
-### Team Hour Grid
-- Same week/month column structure as Panel 1
-- Rows: users assigned to the project
-- Plan mode: numeric hour input per user per week
-
-### Record Mode with Aggregation
-- Hours auto-populated from actual entries in Panel 2
-- Each cell shows bracketed planned vs. recorded difference
-- Total Hours row at bottom sums all users per week
-
-### Task Assignment
-- Below each user row: task list the PM can add/edit/delete
-- Tasks sync automatically to the user's Panel 2 view
-
-### Visual Comparisons
-- Color-coded cells or small bar charts for planned vs. recorded hours
-- Per-user and per-week comparison summaries
+All tables get RLS policies allowing full access (no auth in v1).
 
 ---
 
-## Phase 5: Polish & Integration
+## Step 3: Seed Default Data
 
-### Plan ↔ Record Data Sync
-- First switch to Record mode copies all Plan data as the baseline
-- Subsequent Record edits are fully independent
-- Comparison highlights throughout all panels
+Insert via SQL migration:
 
-### Cross-Panel Features
-- Double-click navigation between panels (project headers, user names)
-- Global deadline consistency across all three panels
-- Auto-save with debounce on all inputs
+**Disciplines** (with color families matching your Excel):
+| Name | Color Family |
+|------|-------------|
+| Landscape | Green (#4CAF50 family) |
+| Urban Design | Pink/Orange (#FF7043 family) |
+| Urban Planning | Orange (#FF9800 family) |
+| Mainland | Purple (#7E57C2 family) |
+| Leave | Blue (#42A5F5 family) |
 
-### Visual Polish
-- Dark theme for Record mode (dark gray background, light text, subdued accent colors)
-- Discipline color coding consistent everywhere
-- Tooltips, keyboard navigation, responsive layout for 1280×768+
+**Users:**
+| Name | Discipline |
+|------|-----------|
+| Ayaan | Mainland |
+| Leo | Urban Design |
+| Fischer | Urban Design |
+| Eleen | Landscape |
+| Gary | Landscape |
+
+**Projects:**
+| Name | Job Number | Discipline |
+|------|-----------|-----------|
+| AAHK EIA | 276007-01 | Urban Planning |
+| HX TOD | 308070-07 | Urban Design |
+| Ludan Village | xxxxxx-xx | Landscape |
+| Qianwan Park | xxxxxx-xx | Mainland |
+
+---
+
+## Step 4: App Shell and Layout
+
+**New files to create:**
+
+- `src/contexts/AppContext.tsx` -- Global state: active panel, current user, plan/record mode
+- `src/components/AppHeader.tsx` -- Header bar with:
+  - Three panel buttons (Discipline Overview, Personal Schedule, Project Management)
+  - Plan/Record toggle switch
+  - User selector dropdown (populated from app_users table)
+- `src/pages/Index.tsx` -- Renders header + conditionally renders the active panel component (placeholder panels for now)
+
+**Visual behavior:**
+- Plan mode: Light theme (default Tailwind/shadcn styles)
+- Record mode: Adds `dark` class to root, applying dark background, light text, subdued accent colors
+- Active panel button is highlighted; inactive ones are muted
+
+**Placeholder panel components** (to be built in later phases):
+- `src/components/panels/DisciplineOverview.tsx`
+- `src/components/panels/PersonalSchedule.tsx`
+- `src/components/panels/ProjectManagement.tsx`
+
+Each placeholder shows the panel name and a brief description so you can verify navigation works.
+
+---
+
+## Step 5: Data Hooks
+
+Create React Query hooks for fetching seed data:
+
+- `src/hooks/useUsers.ts` -- fetch all app_users with discipline info
+- `src/hooks/useProjects.ts` -- fetch all projects with discipline info
+- `src/hooks/useDisciplines.ts` -- fetch all disciplines
+
+These hooks will be used by the header (user selector) and all panels.
+
+---
+
+## Step 6: Discipline Color Utility
+
+Create `src/lib/colors.ts` with:
+- A mapping from discipline name/id to color values (background, text, border, desaturated variant for Record mode)
+- Helper functions: `getDisciplineColor(disciplineId)`, `getDisciplineColorRecord(disciplineId)`
+- Colors match the Excel reference: green rows for Landscape, orange for Urban Design/Planning, purple for Mainland, blue-ish for Leave
+
+---
+
+## What This Phase Delivers
+
+After Phase 1, you will see:
+1. A working header with three panel buttons that switch views
+2. A Plan/Record toggle that switches the entire UI between light and dark themes
+3. A user dropdown populated with the 5 default users from the database
+4. Three placeholder panels confirming navigation works
+5. A fully provisioned database with all tables and seed data ready for Phase 2
+
+Phase 2 (Personal Schedule panel) will follow immediately, using the Excel layout you shared as the visual reference -- weekly rows with discipline-grouped project rows, day columns, colored hour blocks, weekly summary, OT calculation, and the Time Booking Summary table at the bottom.
 

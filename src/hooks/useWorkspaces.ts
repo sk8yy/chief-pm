@@ -16,8 +16,9 @@ export function useWorkspaces(profileId?: string | null) {
       if (error) throw error;
       const all = data as Workspace[];
       if (!profileId) return all;
-      // Show user's own workspaces + any with no owner (shared/sample)
-      return all.filter(w => w.owner_id === profileId || w.owner_id === null);
+      // Show user's own workspaces + shared sample workspace
+      const SAMPLE_ID = '00000000-0000-0000-0000-000000000001';
+      return all.filter(w => w.owner_id === profileId || w.owner_id === null || w.id === SAMPLE_ID);
     },
   });
 }

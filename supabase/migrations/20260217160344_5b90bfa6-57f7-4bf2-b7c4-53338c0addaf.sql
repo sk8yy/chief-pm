@@ -1,0 +1,1 @@
+ALTER TABLE public.deadlines ADD COLUMN visible_to uuid[] DEFAULT NULL;

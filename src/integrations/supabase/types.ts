@@ -87,6 +87,7 @@ export type Database = {
           name: string
           project_id: string | null
           type: string
+          visible_to: string[] | null
         }
         Insert: {
           created_by: string
@@ -95,6 +96,7 @@ export type Database = {
           name: string
           project_id?: string | null
           type?: string
+          visible_to?: string[] | null
         }
         Update: {
           created_by?: string
@@ -103,6 +105,7 @@ export type Database = {
           name?: string
           project_id?: string | null
           type?: string
+          visible_to?: string[] | null
         }
         Relationships: [
           {

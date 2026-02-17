@@ -1,89 +1,65 @@
 
-# Redesign Drag-to-Fill as "Hour Block" System
 
-This redesign replaces the current cell-by-cell drag fill with a visual block-based hour entry system.
+# Rewrite Project Management Panel
 
----
+## Overview
+Replace the current multi-project list view with a single-project-focused panel containing three sections: Project Info, Hour Management, and Deadlines. A discipline-categorized dropdown at the top lets the user switch between projects.
 
-## Concept
+## Database Change
+Add `start_date` and `end_date` columns to the `projects` table (both nullable `date` type). This requires a migration.
 
-When a user drags across multiple day cells in a project row, instead of auto-filling 8 hours per cell, a **floating rounded-rectangle block** appears spanning those cells. The block:
-- Uses the discipline's color scheme (rounded corners, colored background)
-- Has no initial value -- prompts user to type a total
-- Displays the total hours centered on the block
-- On single-click, opens a dropdown dialog with individual day inputs for hour distribution
+## New Hooks
 
----
+### `useUpdateProject` (in `src/hooks/useProjects.ts`)
+A mutation hook to update project fields (name, job_number, discipline_id, manager_id, start_date, end_date). Invalidates `['projects']` on success.
 
-## Implementation Steps
+### `useProjectDeadlines` + `useAddDeadline` + `useDeleteDeadline` (new file `src/hooks/useDeadlines.ts`)
+- Query deadlines filtered by `project_id`
+- Insert mutation for adding a deadline (name, date, project_id, created_by)
+- Delete mutation by deadline id
 
-### 1. New Data Structure: Hour Blocks
+## UI Structure (`src/components/panels/ProjectManagement.tsx` -- full rewrite)
 
-Create a new component `src/components/panels/HourBlock.tsx` that represents a contiguous block of hours across multiple days for one project row.
+### Top Bar
+- **Project Selector**: A `<Select>` dropdown with options grouped by discipline (using `<SelectGroup>` + `<SelectLabel>`). Selecting a project loads its data.
+- **Month Navigation**: Prev/Next month arrows + month label (same pattern as current).
 
-A block is defined by:
-- `projectId`, `startDate`, `endDate` (contiguous range)
-- `totalHours` (user-entered)
-- `distribution`: record of date -> hours (for manual per-day breakdown)
+### Section 1: Project Info
+An editable card with fields:
+- **Project Name** -- text input, auto-saves on blur
+- **Job Number** -- text input, auto-saves on blur
+- **Discipline** -- `<Select>` from disciplines list
+- **Project Manager** -- `<Select>` from all `app_users`
+- **Start Date** / **End Date** -- date inputs
 
-### 2. Rework Drag State in PersonalSchedule
+All changes call `useUpdateProject` on change/blur.
 
-Replace the current `dragState` (which stores a fill value) with a new model:
-- On mousedown on an empty cell, begin tracking a drag range (start column index, current column index) within one project row
-- On mouseup, create an "hour block" spanning those columns
-- Immediately show an inline input on the block for the user to type the total hours
-- Once total is entered (Enter or blur), distribute hours evenly across the days and persist to the database
+### Section 2: Hour Management
+- **"Add Member" button** (top-right): Opens a popover/select to pick a user from `app_users` not already on the project. Adding a member inserts a zero-hour row for the current month's weeks.
+- **Grid**: Columns = weeks of the month. Rows = members who have hours on this project.
+  - Each cell shows planned hours and (in record mode) actual hours.
+  - Member name column has an "x" button to remove the member (deletes their hour entries for this project in the visible range).
+- **Totals row** at the bottom.
+- **Bar chart visualization** below the grid using `recharts` (already installed). Grouped bar chart with one group per member per week, showing planned (blue) vs actual (red/green) bars.
 
-### 3. Hour Block Visual Component (`HourBlock.tsx`)
-
-- Rendered as an absolutely-positioned rounded rectangle overlaying the day cells it spans
-- Background color from the discipline color palette (with opacity)
-- Border using the discipline border color
-- Displays total hours centered
-- On single-click: opens a Popover (using Radix Popover) anchored to the block, containing N input fields (one per covered day) pre-filled with the current distribution
-- User can adjust individual day values; the total updates accordingly
-- On closing the popover, persists all values to the database
-
-### 4. Modify HourCell for Block Awareness
-
-- HourCell still handles individual cell clicks for single-day edits
-- Cells that are part of a block show as "covered" (the block overlay handles display)
-- Drag handlers remain but now create blocks instead of filling values
-
-### 5. Block Detection from Existing Data
-
-To render blocks from persisted data, we need to detect contiguous runs of hours for the same project within a week. Logic:
-- Scan each project row's days left-to-right
-- Group consecutive days that have hours > 0 into a "block"
-- Render each group as an HourBlock overlay
-- Individual cells with hours that aren't part of a contiguous run render normally via HourCell
-
-### 6. Block Distribution Dialog
-
-The popover that appears on block click contains:
-- A header showing the date range (e.g., "Mon 3 - Wed 5")
-- N input boxes labeled with day names, each editable
-- A "Total" display that sums the inputs in real-time
-- Changes are saved on blur/close, persisting each day's value individually to the hours table
-
----
+### Section 3: Deadlines
+- A list of deadlines for the selected project, each showing name + date.
+- **"Add Deadline" button**: Inline form row with name input + date input + confirm button.
+- Each deadline row has a delete "x" button.
+- Sorted by date ascending.
 
 ## Technical Details
 
-### Files to Create
-- `src/components/panels/HourBlock.tsx` -- The floating block component with popover
+### Files Modified
+1. **Migration** -- `ALTER TABLE public.projects ADD COLUMN start_date date; ALTER TABLE public.projects ADD COLUMN end_date date;`
+2. **`src/hooks/useProjects.ts`** -- Add `useUpdateProject` mutation
+3. **`src/hooks/useDeadlines.ts`** -- New file with query + add/delete mutations for project deadlines
+4. **`src/components/panels/ProjectManagement.tsx`** -- Full rewrite with the three sections described above
 
-### Files to Modify
-- `src/components/panels/PersonalSchedule.tsx` -- Replace drag-fill logic with block creation; add block detection and rendering with relative positioning on project rows
-- `src/components/panels/HourCell.tsx` -- Simplify: remove drag highlight styling for cells covered by blocks; keep single-cell click-to-edit for non-block cells
+### Member Management Logic
+- "Add Member" inserts a placeholder hour entry (0 planned hours) for each day in the current week range so the user appears in the grid.
+- "Remove Member (x)" deletes all `hours` rows for that user+project within the visible date range.
 
-### Positioning Strategy
-- Each project row (the 7-day cell area) gets `position: relative`
-- Hour blocks are `position: absolute` overlays calculated from grid column positions
-- Block left/width derived from which day columns it spans (each column is `1fr` within the 7-column area)
+### Hour Visualization
+Uses `recharts` `BarChart` with `Bar` components for planned vs actual, grouped by member name, one chart group per week. Only shown when there is data and mode is `record`.
 
-### Data Flow
-1. User drags across cells -> creates a temporary block (no value yet)
-2. User types total hours into the block's inline input -> distributes evenly, persists via `handleHourChange` for each date
-3. User clicks existing block -> popover opens with per-day inputs -> edits persist on close
-4. Blocks are reconstructed from `hoursMap` data on each render by detecting contiguous non-zero runs

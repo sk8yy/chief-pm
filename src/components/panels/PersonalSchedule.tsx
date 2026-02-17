@@ -124,7 +124,7 @@ const PersonalSchedule = () => {
                   <div>{format(day, 'd')}</div>
                 </div>
               ))}
-              <div className="px-1 py-1.5 text-center">Total</div>
+              <div className="px-1 py-1.5 text-center">Weekly Total</div>
             </div>
 
             {/* Project rows grouped by discipline */}
@@ -189,9 +189,9 @@ const PersonalSchedule = () => {
               });
             })}
 
-            {/* Week summary row */}
+            {/* Daily Normal Hours row */}
             <div className="grid grid-cols-[180px_repeat(7,1fr)_80px] text-xs font-semibold bg-muted/30 border-t">
-              <div className="px-2 py-1 border-r">Weekly Total</div>
+              <div className="px-2 py-1 border-r">Daily Normal Hours</div>
               {days.map((day) => {
                 const dateStr = format(day, 'yyyy-MM-dd');
                 let dayTotal = 0;
@@ -201,15 +201,53 @@ const PersonalSchedule = () => {
                     if (entry) dayTotal += mode === 'plan' ? entry.planned_hours : (entry.recorded_hours ?? 0);
                   })
                 );
+                const normalHours = Math.min(dayTotal, 8);
                 return (
                   <div key={dateStr} className="px-1 py-1 text-center border-r tabular-nums">
-                    {dayTotal > 0 ? dayTotal : ''}
+                    {normalHours > 0 ? normalHours : ''}
                   </div>
                 );
               })}
               <div className="px-1 py-1 text-center tabular-nums">
                 <div>{weekTotal > 0 ? weekTotal : 0}h</div>
                 {ot > 0 && <div className="text-destructive">+{ot} OT</div>}
+              </div>
+            </div>
+
+            {/* Daily OT Hours row */}
+            <div className="grid grid-cols-[180px_repeat(7,1fr)_80px] text-xs font-semibold bg-muted/30 border-t">
+              <div className="px-2 py-1 border-r">Daily OT Hours</div>
+              {days.map((day) => {
+                const dateStr = format(day, 'yyyy-MM-dd');
+                let dayTotal = 0;
+                groupedProjects.forEach((g) =>
+                  g.projects.forEach((p) => {
+                    const entry = hoursMap[`${p.id}_${dateStr}`];
+                    if (entry) dayTotal += mode === 'plan' ? entry.planned_hours : (entry.recorded_hours ?? 0);
+                  })
+                );
+                const dailyOt = Math.max(0, dayTotal - 8);
+                return (
+                  <div key={dateStr} className={`px-1 py-1 text-center border-r tabular-nums ${dailyOt > 0 ? 'text-destructive' : ''}`}>
+                    {dailyOt > 0 ? dailyOt : ''}
+                  </div>
+                );
+              })}
+              <div className="px-1 py-1 text-center tabular-nums">
+                {(() => {
+                  const weeklyDailyOt = days.reduce((sum, day) => {
+                    const dateStr = format(day, 'yyyy-MM-dd');
+                    let dayTotal = 0;
+                    groupedProjects.forEach((g) =>
+                      g.projects.forEach((p) => {
+                        const entry = hoursMap[`${p.id}_${dateStr}`];
+                        if (entry) dayTotal += mode === 'plan' ? entry.planned_hours : (entry.recorded_hours ?? 0);
+                      })
+                    );
+                    return sum + Math.max(0, dayTotal - 8);
+                  }, 0);
+                  return weeklyDailyOt > 0 ? <span className="text-destructive">+{weeklyDailyOt} OT</span> : '';
+                })()}
               </div>
             </div>
           </div>

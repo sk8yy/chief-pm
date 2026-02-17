@@ -369,12 +369,12 @@ const DisciplineOverview = () => {
                               return (
                                 <div
                                   key={ws.toISOString()}
-                                  className="px-1 py-1 border-r min-h-[36px] relative group"
+                                  className="px-1 py-1 border-r min-h-[44px] relative group flex flex-col items-center justify-center"
                                   onMouseEnter={() => setHoveredCell(cellKey)}
                                   onMouseLeave={() => setHoveredCell(null)}
                                 >
                                   {/* Stickers */}
-                                  <div className="flex flex-wrap gap-0.5">
+                                  <div className="flex flex-wrap gap-1 justify-center items-center">
                                     {stickers.map((s) => (
                                       <MemberSticker
                                         key={s.userId}
@@ -383,15 +383,16 @@ const DisciplineOverview = () => {
                                         disciplineId={s.disciplineId}
                                         onDelete={() => deleteStickerHours(s.userId, project.id, ws)}
                                         onCopy={() => setClipboard({ userId: s.userId, hours: s.hours })}
+                                        onEditHours={(newHours) => upsertStickerHours(s.userId, project.id, ws, newHours)}
                                       />
                                     ))}
                                   </div>
 
                                   {/* Hover buttons: Add + Paste */}
                                   {isHovered && (
-                                    <div className="flex gap-0.5 mt-0.5">
+                                    <div className="flex gap-1 mt-0.5 justify-center">
                                       <button
-                                        className="flex items-center gap-0.5 text-[9px] text-muted-foreground hover:text-foreground bg-muted/60 hover:bg-muted rounded px-1 py-0.5 transition-colors"
+                                        className="flex items-center gap-0.5 text-[9px] text-muted-foreground hover:text-foreground bg-muted/60 hover:bg-muted rounded px-1.5 py-0.5 transition-colors"
                                         onClick={(e) => {
                                           e.stopPropagation();
                                           setAddDialogTarget({ projectId: project.id, weekStart: ws });
@@ -401,7 +402,7 @@ const DisciplineOverview = () => {
                                       </button>
                                       {clipboard && (
                                         <button
-                                          className="flex items-center gap-0.5 text-[9px] text-muted-foreground hover:text-foreground bg-muted/60 hover:bg-muted rounded px-1 py-0.5 transition-colors"
+                                          className="flex items-center gap-0.5 text-[9px] text-muted-foreground hover:text-foreground bg-muted/60 hover:bg-muted rounded px-1.5 py-0.5 transition-colors"
                                           onClick={(e) => {
                                             e.stopPropagation();
                                             upsertStickerHours(clipboard.userId, project.id, ws, clipboard.hours);

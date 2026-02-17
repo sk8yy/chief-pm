@@ -158,7 +158,10 @@ const StickerWall: React.FC = () => {
 
   /* ── save extracted items ── */
   const handleConfirmExtraction = async (deadlines: ExtractedDeadline[], tasks: ExtractedTask[]) => {
-    if (!currentUserId) return;
+    if (!currentUserId) {
+      toast.error('Please select a user first.');
+      return;
+    }
     setIsSavingExtraction(true);
     try {
       const weekStart = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
@@ -176,8 +179,11 @@ const StickerWall: React.FC = () => {
             visible_to: d.visible_to?.length ? d.visible_to : null,
           }));
         if (rows.length) {
-          const { error } = await supabase.from('deadlines').insert(rows);
-          if (error) throw error;
+          const { error } = await supabase.from('deadlines').insert(rows as any);
+          if (error) {
+            console.error('Deadline insert error:', error);
+            throw error;
+          }
         }
       }
 

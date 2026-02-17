@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Trash2, Calendar, ListTodo, Loader2, Eye, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { DEADLINE_CATEGORIES, autoCategorize } from '@/lib/deadlineCategories';
 
 export type ExtractedDeadline = {
   name: string;
@@ -12,6 +13,7 @@ export type ExtractedDeadline = {
   project_name?: string;
   source_sticker_index: number;
   visible_to?: string[] | null;
+  category?: string;
 };
 
 export type ExtractedTask = {
@@ -101,17 +103,28 @@ const ExtractionConfirmDialog: React.FC<Props> = ({
                 {deadlines.map((d, i) => (
                   <div key={i} className="border rounded-md p-2 space-y-1.5 bg-muted/20">
                     <div className="flex items-start gap-2">
-                      <Input value={d.name} onChange={e => updateDeadline(i, { name: e.target.value })} className="flex-1 h-8 text-xs" placeholder="Deadline name" />
+                      <Input value={d.name} onChange={e => {
+                        const newName = e.target.value;
+                        updateDeadline(i, { name: newName, category: autoCategorize(newName) });
+                      }} className="flex-1 h-8 text-xs" placeholder="Deadline name" />
                       <Input type="date" value={d.date} onChange={e => updateDeadline(i, { date: e.target.value })} className="w-36 h-8 text-xs" />
                       <button onClick={() => removeDeadline(i)} className="p-1 text-muted-foreground hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></button>
                     </div>
-                    <Select value={d.project_id ?? '__none__'} onValueChange={v => updateDeadline(i, { project_id: v === '__none__' ? null : v, project_name: v === '__none__' ? '' : projects.find(p => p.id === v)?.name })}>
-                      <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Link to project..." /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">No project</SelectItem>
-                        {projects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Select value={d.project_id ?? '__none__'} onValueChange={v => updateDeadline(i, { project_id: v === '__none__' ? null : v, project_name: v === '__none__' ? '' : projects.find(p => p.id === v)?.name })}>
+                        <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Link to project..." /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">No project</SelectItem>
+                          {projects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <Select value={d.category ?? 'due'} onValueChange={v => updateDeadline(i, { category: v })}>
+                        <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Category" /></SelectTrigger>
+                        <SelectContent>
+                          {DEADLINE_CATEGORIES.map(c => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
                     {/* Visible to */}
                     <div className="space-y-1">
                       <button type="button" className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground" onClick={() => updateDeadline(i, { visible_to: d.visible_to ? null : [] })}>

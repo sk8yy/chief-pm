@@ -81,6 +81,7 @@ export type Database = {
       }
       deadlines: {
         Row: {
+          category: string
           created_by: string
           date: string
           id: string
@@ -90,6 +91,7 @@ export type Database = {
           visible_to: string[] | null
         }
         Insert: {
+          category?: string
           created_by: string
           date: string
           id?: string
@@ -99,6 +101,7 @@ export type Database = {
           visible_to?: string[] | null
         }
         Update: {
+          category?: string
           created_by?: string
           date?: string
           id?: string

@@ -6,6 +6,7 @@ import { useDisciplines } from '@/hooks/useDisciplines';
 import { useUsers } from '@/hooks/useUsers';
 import { useAllHours } from '@/hooks/useAllHours';
 import { useProjectDeadlines, useAddDeadline, useDeleteDeadline } from '@/hooks/useDeadlines';
+import { DEADLINE_CATEGORIES, autoCategorize, getCategoryMeta, DeadlineCategory } from '@/lib/deadlineCategories';
 import { useProjectTasks, useToggleTask } from '@/hooks/useTasks';
 import TaskGantt from './TaskGantt';
 import { useProjectAssignments, useAssignMember, useUnassignMember } from '@/hooks/useAssignments';
@@ -26,6 +27,7 @@ const ProjectManagement = () => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [newDeadlineName, setNewDeadlineName] = useState('');
   const [newDeadlineDate, setNewDeadlineDate] = useState('');
+  const [newDeadlineCategory, setNewDeadlineCategory] = useState<DeadlineCategory>('due');
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
   const { data: projects } = useProjects();
@@ -180,9 +182,11 @@ const ProjectManagement = () => {
       date: newDeadlineDate,
       project_id: selectedProjectId,
       created_by: users[0].id,
+      category: newDeadlineCategory,
     });
     setNewDeadlineName('');
     setNewDeadlineDate('');
+    setNewDeadlineCategory('due');
   };
 
   // Group projects by discipline for selector
@@ -486,18 +490,27 @@ const ProjectManagement = () => {
               <Calendar className="h-4 w-4" /> Deadlines
             </div>
             <div className="p-4 space-y-2">
-              {deadlines?.map((d) => (
-                <div key={d.id} className="flex items-center gap-3 text-sm">
-                  <button
-                    onClick={() => deleteDeadline.mutate(d.id)}
-                    className="text-muted-foreground hover:text-destructive transition-colors"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                  <span className="font-medium">{d.name}</span>
-                  <span className="text-muted-foreground ml-auto">{format(new Date(d.date), 'dd MMM yyyy')}</span>
-                </div>
-              ))}
+              {deadlines?.map((d) => {
+                const cat = getCategoryMeta((d as any).category ?? 'due');
+                return (
+                  <div key={d.id} className="flex items-center gap-3 text-sm">
+                    <button
+                      onClick={() => deleteDeadline.mutate(d.id)}
+                      className="text-muted-foreground hover:text-destructive transition-colors"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                    <span
+                      className="text-[10px] font-medium px-1.5 py-0.5 rounded-sm shrink-0"
+                      style={{ backgroundColor: `${cat.color}20`, color: cat.color }}
+                    >
+                      {cat.short}
+                    </span>
+                    <span className="font-medium">{d.name}</span>
+                    <span className="text-muted-foreground ml-auto">{format(new Date(d.date), 'dd MMM yyyy')}</span>
+                  </div>
+                );
+              })}
               {(!deadlines || deadlines.length === 0) && (
                 <div className="text-xs text-muted-foreground">No deadlines yet.</div>
               )}
@@ -507,7 +520,10 @@ const ProjectManagement = () => {
                 <Input
                   placeholder="Deadline name"
                   value={newDeadlineName}
-                  onChange={(e) => setNewDeadlineName(e.target.value)}
+                  onChange={(e) => {
+                    setNewDeadlineName(e.target.value);
+                    setNewDeadlineCategory(autoCategorize(e.target.value));
+                  }}
                   className="h-8 text-sm"
                 />
                 <Input
@@ -516,6 +532,16 @@ const ProjectManagement = () => {
                   onChange={(e) => setNewDeadlineDate(e.target.value)}
                   className="h-8 text-sm w-[160px]"
                 />
+                <Select value={newDeadlineCategory} onValueChange={(v) => setNewDeadlineCategory(v as DeadlineCategory)}>
+                  <SelectTrigger className="h-8 text-xs w-[140px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DEADLINE_CATEGORIES.map(c => (
+                      <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Button size="sm" variant="outline" onClick={handleAddDeadline} disabled={!newDeadlineName || !newDeadlineDate}>
                   <Plus className="h-3 w-3 mr-1" /> Add
                 </Button>

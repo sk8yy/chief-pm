@@ -148,27 +148,33 @@ export type Database = {
       projects: {
         Row: {
           discipline_id: string | null
+          end_date: string | null
           id: string
           job_number: string
           manager_id: string | null
           name: string
           sort_order: number
+          start_date: string | null
         }
         Insert: {
           discipline_id?: string | null
+          end_date?: string | null
           id?: string
           job_number?: string
           manager_id?: string | null
           name: string
           sort_order?: number
+          start_date?: string | null
         }
         Update: {
           discipline_id?: string | null
+          end_date?: string | null
           id?: string
           job_number?: string
           manager_id?: string | null
           name?: string
           sort_order?: number
+          start_date?: string | null
         }
         Relationships: [
           {

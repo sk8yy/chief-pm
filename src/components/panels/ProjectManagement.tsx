@@ -1,25 +1,39 @@
 import { useState, useMemo } from 'react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addMonths, subMonths, eachWeekOfInterval, eachDayOfInterval } from 'date-fns';
 import { useAppContext } from '@/contexts/AppContext';
-import { useProjects } from '@/hooks/useProjects';
+import { useProjects, useUpdateProject } from '@/hooks/useProjects';
 import { useDisciplines } from '@/hooks/useDisciplines';
 import { useUsers } from '@/hooks/useUsers';
 import { useAllHours } from '@/hooks/useAllHours';
-import { useAllTasks, useToggleTask } from '@/hooks/useTasks';
+import { useProjectDeadlines, useAddDeadline, useDeleteDeadline } from '@/hooks/useDeadlines';
 import { getDisciplineColor } from '@/lib/colors';
+import { supabase } from '@/integrations/supabase/client';
+import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Progress } from '@/components/ui/progress';
-import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Users, ClipboardList } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ChevronLeft, ChevronRight, Plus, X, Calendar, Info, Clock } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 const ProjectManagement = () => {
   const { mode } = useAppContext();
+  const qc = useQueryClient();
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
+  const [newDeadlineName, setNewDeadlineName] = useState('');
+  const [newDeadlineDate, setNewDeadlineDate] = useState('');
 
   const { data: projects } = useProjects();
   const { data: disciplines } = useDisciplines();
   const { data: users } = useUsers();
+  const updateProject = useUpdateProject();
+
+  const selectedProject = projects?.find((p) => p.id === selectedProjectId);
+
+  // Auto-select first project
+  if (projects?.length && !selectedProjectId) {
+    setSelectedProjectId(projects[0].id);
+  }
 
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
@@ -34,62 +48,41 @@ const ProjectManagement = () => {
   }), [monthStart.getTime(), monthEnd.getTime()]);
 
   const { data: allHours } = useAllHours(dateRange);
-  const { data: allTasks } = useAllTasks(dateRange);
-  const toggleTask = useToggleTask();
+  const { data: deadlines } = useProjectDeadlines(selectedProjectId || undefined);
+  const addDeadline = useAddDeadline();
+  const deleteDeadline = useDeleteDeadline();
 
+  // Build hours map for selected project
   const hoursMap = useMemo(() => {
     const map: Record<string, { planned_hours: number; recorded_hours: number | null }> = {};
-    allHours?.forEach((h) => {
-      map[`${h.user_id}_${h.project_id}_${h.date}`] = { planned_hours: h.planned_hours, recorded_hours: h.recorded_hours };
+    allHours?.filter((h) => h.project_id === selectedProjectId).forEach((h) => {
+      map[`${h.user_id}_${h.date}`] = { planned_hours: h.planned_hours, recorded_hours: h.recorded_hours };
     });
     return map;
-  }, [allHours]);
+  }, [allHours, selectedProjectId]);
 
-  // Tasks grouped by project
-  const tasksByProject = useMemo(() => {
-    const map: Record<string, typeof allTasks> = {};
-    allTasks?.forEach((t) => {
-      if (!map[t.project_id]) map[t.project_id] = [];
-      map[t.project_id]!.push(t);
-    });
-    return map;
-  }, [allTasks]);
+  // Users who have hours on this project
+  const projectMembers = useMemo(() => {
+    if (!users || !allHours) return [];
+    const memberIds = new Set(
+      allHours.filter((h) => h.project_id === selectedProjectId).map((h) => h.user_id)
+    );
+    return users.filter((u) => memberIds.has(u.id));
+  }, [users, allHours, selectedProjectId]);
 
-  const toggleProject = (id: string) => {
-    setExpandedProjects((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  };
+  // Users not yet on this project
+  const availableUsers = useMemo(() => {
+    if (!users) return [];
+    const memberIds = new Set(projectMembers.map((m) => m.id));
+    return users.filter((u) => !memberIds.has(u.id));
+  }, [users, projectMembers]);
 
-  // Get project hours aggregated across all users
-  const getProjectHours = (projectId: string) => {
-    let planned = 0;
-    let recorded = 0;
-    weeks.forEach((ws) => {
-      const days = eachDayOfInterval({ start: ws, end: endOfWeek(ws, { weekStartsOn: 1 }) });
-      users?.forEach((u) => {
-        days.forEach((day) => {
-          const key = `${u.id}_${projectId}_${format(day, 'yyyy-MM-dd')}`;
-          const entry = hoursMap[key];
-          if (entry) {
-            planned += entry.planned_hours;
-            recorded += entry.recorded_hours ?? 0;
-          }
-        });
-      });
-    });
-    return { planned, recorded };
-  };
-
-  // Get user hours for a project in a specific week
-  const getUserProjectWeekHours = (userId: string, projectId: string, weekStart: Date) => {
+  const getUserWeekHours = (userId: string, weekStart: Date) => {
     const days = eachDayOfInterval({ start: weekStart, end: endOfWeek(weekStart, { weekStartsOn: 1 }) });
     let planned = 0;
     let recorded = 0;
     days.forEach((day) => {
-      const key = `${userId}_${projectId}_${format(day, 'yyyy-MM-dd')}`;
+      const key = `${userId}_${format(day, 'yyyy-MM-dd')}`;
       const entry = hoursMap[key];
       if (entry) {
         planned += entry.planned_hours;
@@ -99,236 +92,329 @@ const ProjectManagement = () => {
     return { planned, recorded };
   };
 
-  // Get users that have any hours on a project
-  const getProjectUsers = (projectId: string) => {
-    if (!users) return [];
-    return users.filter((u) => {
-      return weeks.some((ws) => {
-        const { planned, recorded } = getUserProjectWeekHours(u.id, projectId, ws);
-        return planned > 0 || recorded > 0;
-      });
+  // Add member
+  const handleAddMember = async (userId: string) => {
+    if (!selectedProjectId) return;
+    // Insert zero-hour entries for each day in the current week range
+    const rows = weeks.flatMap((ws) => {
+      const days = eachDayOfInterval({ start: ws, end: endOfWeek(ws, { weekStartsOn: 1 }) });
+      return days.map((day) => ({
+        user_id: userId,
+        project_id: selectedProjectId,
+        date: format(day, 'yyyy-MM-dd'),
+        planned_hours: 0,
+      }));
     });
+    await supabase.from('hours').upsert(rows, { onConflict: 'user_id,project_id,date', ignoreDuplicates: true });
+    qc.invalidateQueries({ queryKey: ['all_hours'] });
   };
 
-  // Group projects by discipline
+  // Remove member
+  const handleRemoveMember = async (userId: string) => {
+    if (!selectedProjectId) return;
+    await supabase.from('hours').delete().eq('user_id', userId).eq('project_id', selectedProjectId).gte('date', dateRange.start).lte('date', dateRange.end);
+    qc.invalidateQueries({ queryKey: ['all_hours'] });
+  };
+
+  // Handle adding deadline
+  const handleAddDeadline = () => {
+    if (!newDeadlineName || !newDeadlineDate || !selectedProjectId || !users?.length) return;
+    addDeadline.mutate({
+      name: newDeadlineName,
+      date: newDeadlineDate,
+      project_id: selectedProjectId,
+      created_by: users[0].id,
+    });
+    setNewDeadlineName('');
+    setNewDeadlineDate('');
+  };
+
+  // Group projects by discipline for selector
   const groupedProjects = useMemo(() => {
     if (!projects || !disciplines) return [];
-    return disciplines.filter(d => d.name !== 'Leave').map((d) => ({
+    return disciplines.map((d) => ({
       discipline: d,
       projects: projects.filter((p) => p.discipline_id === d.id),
     })).filter((g) => g.projects.length > 0);
   }, [projects, disciplines]);
 
+  // Chart data
+  const chartData = useMemo(() => {
+    return projectMembers.flatMap((member) =>
+      weeks.map((ws) => {
+        const { planned, recorded } = getUserWeekHours(member.id, ws);
+        return {
+          name: `${member.name} - W/C ${format(ws, 'MMM d')}`,
+          Planned: planned,
+          Actual: recorded,
+        };
+      })
+    ).filter((d) => d.Planned > 0 || d.Actual > 0);
+  }, [projectMembers, weeks, hoursMap]);
+
+  const handleFieldUpdate = (field: string, value: string | null) => {
+    if (!selectedProject) return;
+    updateProject.mutate({ id: selectedProject.id, [field]: value || null });
+  };
+
+  if (!projects?.length) {
+    return <div className="p-8 text-center text-muted-foreground">No projects found.</div>;
+  }
+
   return (
-    <div className="p-4 space-y-4">
-      {/* Month navigation */}
-      <div className="flex items-center gap-3">
-        <Button variant="outline" size="icon" onClick={() => setCurrentMonth((m) => subMonths(m, 1))}>
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-        <h2 className="text-lg font-semibold min-w-[160px] text-center">
-          {format(currentMonth, 'MMMM yyyy')}
-        </h2>
-        <Button variant="outline" size="icon" onClick={() => setCurrentMonth((m) => addMonths(m, 1))}>
-          <ChevronRight className="h-4 w-4" />
-        </Button>
-        <span className="text-xs text-muted-foreground ml-2">
-          {mode === 'plan' ? 'Planning view' : 'Recording view — comparing against plan'}
-        </span>
+    <div className="p-4 space-y-6 max-w-5xl mx-auto">
+      {/* Top Bar: Project Selector + Month Nav */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
+          <SelectTrigger className="w-[280px]">
+            <SelectValue placeholder="Select project..." />
+          </SelectTrigger>
+          <SelectContent>
+            {groupedProjects.map((g) => (
+              <SelectGroup key={g.discipline.id}>
+                <SelectLabel>{g.discipline.name}</SelectLabel>
+                {g.projects.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name} ({p.job_number})
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <div className="flex items-center gap-2 ml-auto">
+          <Button variant="outline" size="icon" onClick={() => setCurrentMonth((m) => subMonths(m, 1))}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <span className="text-sm font-semibold min-w-[120px] text-center">
+            {format(currentMonth, 'MMMM yyyy')}
+          </span>
+          <Button variant="outline" size="icon" onClick={() => setCurrentMonth((m) => addMonths(m, 1))}>
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
-      {/* Project cards by discipline */}
-      {groupedProjects.map((group) => {
-        const colors = getDisciplineColor(group.discipline.id);
+      {selectedProject && (
+        <>
+          {/* Section 1: Project Info */}
+          <section className="border rounded-lg bg-card">
+            <div className="px-4 py-2 border-b bg-muted/30 flex items-center gap-2 text-sm font-semibold">
+              <Info className="h-4 w-4" /> Project Info
+            </div>
+            <div className="p-4 grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Project Name</label>
+                <Input
+                  defaultValue={selectedProject.name}
+                  onBlur={(e) => handleFieldUpdate('name', e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Job Number</label>
+                <Input
+                  defaultValue={selectedProject.job_number}
+                  onBlur={(e) => handleFieldUpdate('job_number', e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Discipline</label>
+                <Select
+                  value={selectedProject.discipline_id ?? ''}
+                  onValueChange={(v) => handleFieldUpdate('discipline_id', v)}
+                >
+                  <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
+                  <SelectContent>
+                    {disciplines?.map((d) => (
+                      <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Project Manager</label>
+                <Select
+                  value={selectedProject.manager_id ?? ''}
+                  onValueChange={(v) => handleFieldUpdate('manager_id', v)}
+                >
+                  <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
+                  <SelectContent>
+                    {users?.map((u) => (
+                      <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Start Date</label>
+                <Input
+                  type="date"
+                  defaultValue={(selectedProject as any).start_date ?? ''}
+                  onBlur={(e) => handleFieldUpdate('start_date', e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">End Date</label>
+                <Input
+                  type="date"
+                  defaultValue={(selectedProject as any).end_date ?? ''}
+                  onBlur={(e) => handleFieldUpdate('end_date', e.target.value)}
+                />
+              </div>
+            </div>
+          </section>
 
-        return (
-          <div key={group.discipline.id} className="space-y-2">
-            {/* Discipline label */}
-            <div className="flex items-center gap-2 px-1">
-              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: colors.bg }} />
-              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                {group.discipline.name}
-              </span>
+          {/* Section 2: Hour Management */}
+          <section className="border rounded-lg bg-card">
+            <div className="px-4 py-2 border-b bg-muted/30 flex items-center gap-2 text-sm font-semibold">
+              <Clock className="h-4 w-4" /> Hour Management
+              <div className="ml-auto">
+                {availableUsers.length > 0 && (
+                  <Select onValueChange={(v) => handleAddMember(v)}>
+                    <SelectTrigger className="h-7 text-xs w-[160px]">
+                      <Plus className="h-3 w-3 mr-1" /> Add Member
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableUsers.map((u) => (
+                        <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
             </div>
 
-            {/* Project cards */}
-            {group.projects.map((project) => {
-              const isExpanded = expandedProjects.has(project.id);
-              const { planned, recorded } = getProjectHours(project.id);
-              const projectUsers = getProjectUsers(project.id);
-              const projectTasks = tasksByProject[project.id] ?? [];
-              const completedTasks = projectTasks.filter((t) => t.is_completed);
-              const diff = recorded - planned;
+            {/* Hours grid */}
+            <div className="overflow-x-auto">
+              <div
+                className="grid text-xs font-medium border-b bg-muted/40 min-w-[600px]"
+                style={{ gridTemplateColumns: `160px repeat(${weeks.length}, 1fr) 80px` }}
+              >
+                <div className="px-3 py-1.5 border-r">Member</div>
+                {weeks.map((ws) => (
+                  <div key={ws.toISOString()} className="px-1 py-1.5 text-center border-r">
+                    W/C {format(ws, 'MMM d')}
+                  </div>
+                ))}
+                <div className="px-1 py-1.5 text-center">Total</div>
+              </div>
 
-              return (
-                <div key={project.id} className="border rounded-lg overflow-hidden bg-card">
-                  {/* Project header */}
-                  <button
-                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/30 transition-colors"
-                    style={{ borderLeft: `4px solid ${colors.bg}` }}
-                    onClick={() => toggleProject(project.id)}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-sm">{project.name}</div>
-                      <div className="text-xs text-muted-foreground">{project.job_number}</div>
-                    </div>
-
-                    {/* Hours summary */}
-                    <div className="flex items-center gap-4 text-sm">
-                      <div className="text-right">
-                        <div className="text-xs text-muted-foreground">Planned</div>
-                        <div className="font-semibold tabular-nums">{planned}h</div>
-                      </div>
-                      {mode === 'record' && (
-                        <>
-                          <div className="text-right">
-                            <div className="text-xs text-muted-foreground">Recorded</div>
-                            <div className="font-semibold tabular-nums">{recorded}h</div>
-                          </div>
-                          <div className={`text-right ${diff > 0 ? 'text-destructive' : diff < 0 ? 'text-green-600' : 'text-muted-foreground'}`}>
-                            <div className="text-xs">Diff</div>
-                            <div className="font-semibold tabular-nums">
-                              {diff !== 0 ? `${diff > 0 ? '+' : ''}${diff}h` : '—'}
-                            </div>
-                          </div>
-                        </>
-                      )}
-                    </div>
-
-                    {/* Team & task count badges */}
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1"><Users className="h-3 w-3" />{projectUsers.length}</span>
-                      {projectTasks.length > 0 && (
-                        <span className="flex items-center gap-1"><ClipboardList className="h-3 w-3" />{completedTasks.length}/{projectTasks.length}</span>
-                      )}
-                    </div>
-
-                    {planned > 0 && mode === 'record' && (
-                      <div className="w-20">
-                        <Progress value={Math.min(100, (recorded / planned) * 100)} className="h-1.5" />
-                      </div>
-                    )}
-
-                    {isExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
-                  </button>
-
-                  {/* Expanded: team allocation + tasks */}
-                  {isExpanded && (
-                    <div className="border-t">
-                      {/* Team allocation weekly table */}
-                      <div className="px-3 py-2 text-xs font-semibold text-muted-foreground bg-muted/20 border-b flex items-center gap-1">
-                        <Users className="h-3 w-3" /> Team Allocation
-                      </div>
-                      <div
-                        className="grid text-xs font-medium border-b bg-muted/40"
-                        style={{ gridTemplateColumns: `140px repeat(${weeks.length}, 1fr) 80px` }}
-                      >
-                        <div className="px-3 py-1 border-r">Member</div>
-                        {weeks.map((ws) => (
-                          <div key={ws.toISOString()} className="px-1 py-1 text-center border-r">
-                            W/C {format(ws, 'MMM d')}
-                          </div>
-                        ))}
-                        <div className="px-1 py-1 text-center">Total</div>
-                      </div>
-
-                      {projectUsers.map((user) => {
-                        let userTotal = 0;
-                        return (
-                          <div
-                            key={user.id}
-                            className="grid text-sm border-b last:border-b-0"
-                            style={{ gridTemplateColumns: `140px repeat(${weeks.length}, 1fr) 80px` }}
-                          >
-                            <div className="px-3 py-1 border-r truncate text-xs font-medium flex items-center gap-1">
-                              <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: getDisciplineColor(user.discipline_id).bg }} />
-                              {user.name}
-                            </div>
-                            {weeks.map((ws) => {
-                              const { planned: wp, recorded: wr } = getUserProjectWeekHours(user.id, project.id, ws);
-                              const val = mode === 'plan' ? wp : wr;
-                              userTotal += val;
-                              const wDiff = mode === 'record' && wp > 0 ? wr - wp : null;
-                              return (
-                                <div key={ws.toISOString()} className="px-1 py-1 text-center border-r tabular-nums text-xs">
-                                  {val > 0 ? val : ''}
-                                  {wDiff !== null && wDiff !== 0 && (
-                                    <span className={`ml-0.5 text-[9px] ${wDiff > 0 ? 'text-destructive' : 'text-green-600'}`}>
-                                      {wDiff > 0 ? '+' : ''}{wDiff}
-                                    </span>
-                                  )}
-                                </div>
-                              );
-                            })}
-                            <div className="px-1 py-1 text-center tabular-nums text-xs font-semibold">
-                              {userTotal > 0 ? `${userTotal}h` : '—'}
-                            </div>
-                          </div>
-                        );
-                      })}
-
-                      {/* Project total row */}
-                      <div
-                        className="grid text-xs font-semibold bg-muted/30 border-t"
-                        style={{ gridTemplateColumns: `140px repeat(${weeks.length}, 1fr) 80px` }}
-                      >
-                        <div className="px-3 py-1 border-r">Project Total</div>
-                        {weeks.map((ws) => {
-                          let weekTotal = 0;
-                          projectUsers.forEach((u) => {
-                            const { planned: wp, recorded: wr } = getUserProjectWeekHours(u.id, project.id, ws);
-                            weekTotal += mode === 'plan' ? wp : wr;
-                          });
-                          return (
-                            <div key={ws.toISOString()} className="px-1 py-1 text-center border-r tabular-nums">
-                              {weekTotal > 0 ? weekTotal : '—'}
-                            </div>
-                          );
-                        })}
-                        <div className="px-1 py-1 text-center tabular-nums font-bold">
-                          {mode === 'plan' ? planned : recorded}h
-                        </div>
-                      </div>
-
-                      {/* Tasks section */}
-                      {projectTasks.length > 0 && (
-                        <>
-                          <div className="px-3 py-2 text-xs font-semibold text-muted-foreground bg-muted/20 border-t border-b flex items-center gap-1">
-                            <ClipboardList className="h-3 w-3" /> Tasks ({completedTasks.length}/{projectTasks.length} completed)
-                          </div>
-                          <div className="px-3 py-2 space-y-1">
-                            {projectTasks.map((task) => {
-                              const taskUser = users?.find((u) => u.id === task.user_id);
-                              return (
-                                <div key={task.id} className="flex items-center gap-2 text-sm">
-                                  <Checkbox
-                                    checked={task.is_completed}
-                                    onCheckedChange={(checked) => {
-                                      toggleTask.mutate({ id: task.id, is_completed: !!checked });
-                                    }}
-                                  />
-                                  <span className={task.is_completed ? 'line-through text-muted-foreground' : ''}>
-                                    {task.description}
-                                  </span>
-                                  {taskUser && (
-                                    <span className="text-xs text-muted-foreground ml-auto">
-                                      {taskUser.name}
-                                    </span>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  )}
+              {projectMembers.length === 0 && (
+                <div className="p-4 text-center text-xs text-muted-foreground">
+                  No members yet. Add a member above.
                 </div>
-              );
-            })}
-          </div>
-        );
-      })}
+              )}
+
+              {projectMembers.map((user) => {
+                let userPlannedTotal = 0;
+                let userRecordedTotal = 0;
+                return (
+                  <div
+                    key={user.id}
+                    className="grid text-sm border-b last:border-b-0 min-w-[600px]"
+                    style={{ gridTemplateColumns: `160px repeat(${weeks.length}, 1fr) 80px` }}
+                  >
+                    <div className="px-3 py-1 border-r truncate text-xs font-medium flex items-center gap-1">
+                      <button
+                        onClick={() => handleRemoveMember(user.id)}
+                        className="text-muted-foreground hover:text-destructive transition-colors"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: getDisciplineColor(user.discipline_id).bg }} />
+                      {user.name}
+                    </div>
+                    {weeks.map((ws) => {
+                      const { planned, recorded } = getUserWeekHours(user.id, ws);
+                      userPlannedTotal += planned;
+                      userRecordedTotal += recorded;
+                      return (
+                        <div key={ws.toISOString()} className="px-1 py-1 text-center border-r tabular-nums text-xs">
+                          {mode === 'plan' ? (
+                            planned > 0 ? planned : ''
+                          ) : (
+                            <>
+                              {planned > 0 && <span className="text-muted-foreground">{planned}</span>}
+                              {recorded > 0 && <span className="ml-1 font-semibold">{recorded}</span>}
+                            </>
+                          )}
+                        </div>
+                      );
+                    })}
+                    <div className="px-1 py-1 text-center tabular-nums text-xs font-semibold">
+                      {mode === 'plan'
+                        ? (userPlannedTotal > 0 ? `${userPlannedTotal}h` : '—')
+                        : (userRecordedTotal > 0 ? `${userRecordedTotal}h` : '—')}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Chart visualization */}
+            {chartData.length > 0 && mode === 'record' && (
+              <div className="px-4 py-4 border-t">
+                <div className="text-xs font-semibold text-muted-foreground mb-2">Planned vs Actual Hours</div>
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-20} textAnchor="end" height={60} />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="Planned" fill="hsl(var(--primary))" />
+                    <Bar dataKey="Actual" fill="hsl(var(--destructive))" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </section>
+
+          {/* Section 3: Deadlines */}
+          <section className="border rounded-lg bg-card">
+            <div className="px-4 py-2 border-b bg-muted/30 flex items-center gap-2 text-sm font-semibold">
+              <Calendar className="h-4 w-4" /> Deadlines
+            </div>
+            <div className="p-4 space-y-2">
+              {deadlines?.map((d) => (
+                <div key={d.id} className="flex items-center gap-3 text-sm">
+                  <button
+                    onClick={() => deleteDeadline.mutate(d.id)}
+                    className="text-muted-foreground hover:text-destructive transition-colors"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                  <span className="font-medium">{d.name}</span>
+                  <span className="text-muted-foreground ml-auto">{format(new Date(d.date), 'dd MMM yyyy')}</span>
+                </div>
+              ))}
+              {(!deadlines || deadlines.length === 0) && (
+                <div className="text-xs text-muted-foreground">No deadlines yet.</div>
+              )}
+
+              {/* Add deadline inline form */}
+              <div className="flex items-center gap-2 pt-2 border-t">
+                <Input
+                  placeholder="Deadline name"
+                  value={newDeadlineName}
+                  onChange={(e) => setNewDeadlineName(e.target.value)}
+                  className="h-8 text-sm"
+                />
+                <Input
+                  type="date"
+                  value={newDeadlineDate}
+                  onChange={(e) => setNewDeadlineDate(e.target.value)}
+                  className="h-8 text-sm w-[160px]"
+                />
+                <Button size="sm" variant="outline" onClick={handleAddDeadline} disabled={!newDeadlineName || !newDeadlineDate}>
+                  <Plus className="h-3 w-3 mr-1" /> Add
+                </Button>
+              </div>
+            </div>
+          </section>
+        </>
+      )}
     </div>
   );
 };

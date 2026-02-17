@@ -6,8 +6,8 @@ import { useDisciplines } from '@/hooks/useDisciplines';
 import { useUsers } from '@/hooks/useUsers';
 import { useAllHours } from '@/hooks/useAllHours';
 import { useProjectDeadlines, useAddDeadline, useDeleteDeadline } from '@/hooks/useDeadlines';
-import { useTasks, useToggleTask } from '@/hooks/useTasks';
-import TaskList from './TaskList';
+import { useProjectTasks, useToggleTask } from '@/hooks/useTasks';
+import TaskGantt from './TaskGantt';
 import { useProjectAssignments, useAssignMember, useUnassignMember } from '@/hooks/useAssignments';
 import { getDisciplineColor } from '@/lib/colors';
 import { supabase } from '@/integrations/supabase/client';
@@ -54,7 +54,7 @@ const ProjectManagement = () => {
 
   const { data: allHours } = useAllHours(dateRange);
   const { data: deadlines } = useProjectDeadlines(selectedProjectId || undefined);
-  const { data: projectTasks } = useTasks(selectedProjectId ? { projectId: selectedProjectId } : undefined);
+  const { data: projectTasks } = useProjectTasks(selectedProjectId || undefined);
   const toggleTask = useToggleTask();
   const { data: projectAssignments } = useProjectAssignments(selectedProjectId || undefined, dateRange);
   const assignMemberMut = useAssignMember();
@@ -469,16 +469,15 @@ const ProjectManagement = () => {
             )}
           </section>
 
-          {/* Section 2.5: Tasks */}
-          {projectTasks && projectTasks.length > 0 && (
-            <section className="border rounded-lg bg-card p-4">
-              <TaskList
-                tasks={projectTasks}
-                onToggle={(id, is_completed) => toggleTask.mutate({ id, is_completed })}
-                title="Tasks"
-              />
-            </section>
-          )}
+          {/* Section 2.5: Task Calendar */}
+          <section className="border rounded-lg bg-card p-4">
+            <TaskGantt
+              tasks={projectTasks ?? []}
+              projectId={selectedProjectId}
+              users={users ?? []}
+              onToggle={(id, is_completed) => toggleTask.mutate({ id, is_completed })}
+            />
+          </section>
 
           {/* Section 3: Deadlines */}
           <section className="border rounded-lg bg-card">

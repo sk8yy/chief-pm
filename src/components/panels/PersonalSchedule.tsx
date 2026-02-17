@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addMonths, subMonths, eachWeekOfInterval, eachDayOfInterval, isSameMonth } from 'date-fns';
+import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addMonths, subMonths, eachWeekOfInterval, eachDayOfInterval, isSameMonth, parseISO } from 'date-fns';
 import { useAppContext } from '@/contexts/AppContext';
 import { useProjects } from '@/hooks/useProjects';
 import { useDisciplines } from '@/hooks/useDisciplines';
@@ -628,9 +628,20 @@ const PersonalSchedule = () => {
 
             {/* Tasks for this week */}
             {(() => {
-              const weekTasks = allTasks?.filter(
-                t => t.user_id === currentUserId && t.week_start === weekStartStr
-              ) ?? [];
+              // Show tasks for this user that overlap this week (based on start_date/end_date or week_start fallback)
+              const wsStart = parseISO(weekStartStr);
+              const wsEnd = endOfWeek(wsStart, { weekStartsOn: 1 });
+              const weekTasks = allTasks?.filter(t => {
+                if (t.user_id !== currentUserId) return false;
+                // If task has start_date/end_date, check overlap with this week
+                if (t.start_date || t.end_date) {
+                  const tStart = t.start_date ? parseISO(t.start_date) : parseISO(t.end_date!);
+                  const tEnd = t.end_date ? parseISO(t.end_date) : tStart;
+                  return tStart <= wsEnd && tEnd >= wsStart;
+                }
+                // Fallback: match by week_start
+                return t.week_start === weekStartStr;
+              }) ?? [];
               if (weekTasks.length === 0) return null;
               return (
                 <div className="px-3 py-2 border-t">
@@ -639,6 +650,9 @@ const PersonalSchedule = () => {
                     onToggle={(id, is_completed) => toggleTask.mutate({ id, is_completed })}
                     title="Tasks"
                     compact
+                    showProject
+                    projects={projects?.map(p => ({ id: p.id, name: p.name })) ?? []}
+                    showDates
                   />
                 </div>
               );

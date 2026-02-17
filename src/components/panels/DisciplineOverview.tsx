@@ -575,6 +575,10 @@ const DisciplineOverview = () => {
                             onToggle={(id, is_completed) => toggleTask.mutate({ id, is_completed })}
                             title="Tasks"
                             compact
+                            showAssignees
+                            users={users ?? []}
+                            showProject
+                            projects={projects?.map(p => ({ id: p.id, name: p.name })) ?? []}
                           />
                         </div>
                       );

@@ -8,9 +8,50 @@ import { getDisciplineColor, getDisciplineColorRecord } from '@/lib/colors';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import HourCell from './HourCell';
+import HourBlock, { BlockData } from './HourBlock';
 import TimeSummaryTable from './TimeSummaryTable';
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+/** Detect contiguous runs of non-zero hours for a project across days */
+function detectBlocks(
+  projectId: string,
+  days: Date[],
+  hoursMap: Record<string, { planned_hours: number; recorded_hours: number | null }>,
+  mode: 'plan' | 'record'
+): BlockData[] {
+  const blocks: BlockData[] = [];
+  let current: string[] | null = null;
+  let currentDist: Record<string, number> = {};
+
+  days.forEach((day) => {
+    const dateStr = format(day, 'yyyy-MM-dd');
+    const entry = hoursMap[`${projectId}_${dateStr}`];
+    const val = mode === 'plan' ? (entry?.planned_hours ?? 0) : (entry?.recorded_hours ?? 0);
+
+    if (val > 0) {
+      if (!current) {
+        current = [dateStr];
+        currentDist = { [dateStr]: val };
+      } else {
+        current.push(dateStr);
+        currentDist[dateStr] = val;
+      }
+    } else {
+      if (current && current.length >= 2) {
+        blocks.push({ projectId, dates: current, distribution: currentDist });
+      }
+      current = null;
+      currentDist = {};
+    }
+  });
+
+  if (current && current.length >= 2) {
+    blocks.push({ projectId, dates: current, distribution: currentDist });
+  }
+
+  return blocks;
+}
 
 const PersonalSchedule = () => {
   const { currentUserId, mode } = useAppContext();
@@ -21,7 +62,6 @@ const PersonalSchedule = () => {
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
 
-  // Get all weeks that overlap with this month
   const weeks = useMemo(() => {
     return eachWeekOfInterval({ start: monthStart, end: monthEnd }, { weekStartsOn: 1 });
   }, [monthStart.getTime(), monthEnd.getTime()]);
@@ -34,44 +74,35 @@ const PersonalSchedule = () => {
   const { data: hours } = useHours(currentUserId, dateRange);
   const upsertHours = useUpsertHours();
 
-  // Drag-to-fill state
+  // Drag state for creating new blocks
   const [dragState, setDragState] = useState<{
     projectId: string;
-    dates: Set<string>;
-    fillValue: number;
+    dayIndices: Set<number>;
+    weekKey: string;
   } | null>(null);
   const dragStateRef = useRef(dragState);
   dragStateRef.current = dragState;
 
+  // Track newly created blocks waiting for total input
+  const [newBlock, setNewBlock] = useState<{
+    projectId: string;
+    dates: string[];
+    weekKey: string;
+  } | null>(null);
+
   useEffect(() => {
     const handleMouseUp = () => {
       const ds = dragStateRef.current;
-      if (ds && ds.dates.size > 0) {
-        ds.dates.forEach((dateStr) => {
-          handleHourChange(ds.projectId, dateStr, ds.fillValue);
-        });
+      if (ds && ds.dayIndices.size >= 2) {
+        // Will be handled by the component via newBlock state set in the render
+        // We signal by keeping dragState briefly — the render picks it up
       }
-      setDragState(null);
+      // dragState cleared after render picks up
     };
     window.addEventListener('mouseup', handleMouseUp);
     return () => window.removeEventListener('mouseup', handleMouseUp);
   }, []);
 
-  const startDrag = useCallback((projectId: string, dateStr: string, currentVal: number) => {
-    const fillValue = currentVal > 0 ? 0 : 8;
-    setDragState({ projectId, dates: new Set([dateStr]), fillValue });
-  }, []);
-
-  const enterDrag = useCallback((projectId: string, dateStr: string) => {
-    setDragState((prev) => {
-      if (!prev || prev.projectId !== projectId) return prev;
-      const next = new Set(prev.dates);
-      next.add(dateStr);
-      return { ...prev, dates: next };
-    });
-  }, []);
-
-  // Group projects by discipline
   const groupedProjects = useMemo(() => {
     if (!projects || !disciplines) return [];
     return disciplines.map((d) => ({
@@ -80,7 +111,6 @@ const PersonalSchedule = () => {
     })).filter((g) => g.projects.length > 0);
   }, [projects, disciplines]);
 
-  // Build hours lookup: `${projectId}_${date}` -> hours entry
   const hoursMap = useMemo(() => {
     const map: Record<string, { planned_hours: number; recorded_hours: number | null }> = {};
     hours?.forEach((h) => {
@@ -99,6 +129,50 @@ const PersonalSchedule = () => {
       [field]: value,
     });
   }, [currentUserId, mode, upsertHours]);
+
+  const handleBlockDistribution = useCallback((projectId: string, distribution: Record<string, number>) => {
+    Object.entries(distribution).forEach(([date, val]) => {
+      handleHourChange(projectId, date, val);
+    });
+    setNewBlock(null);
+  }, [handleHourChange]);
+
+  // Finalize drag into a newBlock on mouseup
+  useEffect(() => {
+    const handleUp = () => {
+      const ds = dragStateRef.current;
+      if (!ds) return;
+      if (ds.dayIndices.size >= 2) {
+        // We need the days array for this week — store minimal info and resolve in render
+        setDragState(null);
+        // Store the drag result as newBlock
+        setNewBlock({
+          projectId: ds.projectId,
+          dates: [], // placeholder, resolved per-week in render
+          weekKey: ds.weekKey,
+        });
+        // We need actual dates — store indices temporarily
+        (window as any).__hourBlockDragIndices = Array.from(ds.dayIndices).sort((a, b) => a - b);
+      } else {
+        setDragState(null);
+      }
+    };
+    window.addEventListener('mouseup', handleUp);
+    return () => window.removeEventListener('mouseup', handleUp);
+  }, []);
+
+  const startDrag = useCallback((projectId: string, dayIndex: number, weekKey: string) => {
+    setDragState({ projectId, dayIndices: new Set([dayIndex]), weekKey });
+  }, []);
+
+  const enterDrag = useCallback((projectId: string, dayIndex: number) => {
+    setDragState((prev) => {
+      if (!prev || prev.projectId !== projectId) return prev;
+      const next = new Set(prev.dayIndices);
+      next.add(dayIndex);
+      return { ...prev, dayIndices: next };
+    });
+  }, []);
 
   if (!currentUserId) {
     return (
@@ -125,12 +199,27 @@ const PersonalSchedule = () => {
 
       {/* Weekly grids */}
       {weeks.map((weekStart) => {
+        const weekKey = weekStart.toISOString();
         const days = eachDayOfInterval({
           start: weekStart,
           end: endOfWeek(weekStart, { weekStartsOn: 1 }),
         });
 
-        // Calculate weekly totals
+        // Resolve newBlock dates if this is the target week
+        let resolvedNewBlock: { projectId: string; dates: string[] } | null = null;
+        if (newBlock && newBlock.weekKey === weekKey) {
+          const indices: number[] = (window as any).__hourBlockDragIndices ?? [];
+          if (indices.length >= 2) {
+            const minI = indices[0];
+            const maxI = indices[indices.length - 1];
+            const dates: string[] = [];
+            for (let i = minI; i <= maxI; i++) {
+              dates.push(format(days[i], 'yyyy-MM-dd'));
+            }
+            resolvedNewBlock = { projectId: newBlock.projectId, dates };
+          }
+        }
+
         let weekTotal = 0;
         groupedProjects.forEach((g) =>
           g.projects.forEach((p) =>
@@ -146,7 +235,7 @@ const PersonalSchedule = () => {
         const ot = Math.max(0, weekTotal - 40);
 
         return (
-          <div key={weekStart.toISOString()} className="border rounded-lg overflow-hidden bg-card">
+          <div key={weekKey} className="border rounded-lg overflow-hidden bg-card">
             {/* Header row */}
             <div className="grid grid-cols-[180px_repeat(7,1fr)_80px] text-xs font-medium border-b bg-muted/50">
               <div className="px-2 py-1.5 border-r">
@@ -164,14 +253,24 @@ const PersonalSchedule = () => {
               <div className="px-1 py-1.5 text-center">Weekly Total</div>
             </div>
 
-            {/* Project rows grouped by discipline */}
+            {/* Project rows */}
             {groupedProjects.map((group) => {
               const colors = mode === 'record'
                 ? getDisciplineColorRecord(group.discipline.id)
                 : getDisciplineColor(group.discipline.id);
 
               return group.projects.map((project) => {
-                // Row total for this project
+                // Detect blocks from existing data
+                const existingBlocks = detectBlocks(project.id, days, hoursMap, mode);
+                
+                // Check if there's a new block for this project in this week
+                const isNewBlockHere = resolvedNewBlock && resolvedNewBlock.projectId === project.id;
+                
+                // Set of dates covered by blocks
+                const coveredDates = new Set<string>();
+                existingBlocks.forEach((b) => b.dates.forEach((d) => coveredDates.add(d)));
+
+                // Row total
                 let rowTotal = 0;
                 days.forEach((day) => {
                   const key = `${project.id}_${format(day, 'yyyy-MM-dd')}`;
@@ -180,6 +279,10 @@ const PersonalSchedule = () => {
                     rowTotal += mode === 'plan' ? entry.planned_hours : (entry.recorded_hours ?? 0);
                   }
                 });
+
+                // Drag highlight indices for this project
+                const dragIndices = dragState?.projectId === project.id && dragState.weekKey === weekKey
+                  ? dragState.dayIndices : null;
 
                 return (
                   <div
@@ -197,30 +300,105 @@ const PersonalSchedule = () => {
                       />
                       <span className="truncate">{project.name}</span>
                     </div>
-                    {days.map((day) => {
-                      const dateStr = format(day, 'yyyy-MM-dd');
-                      const key = `${project.id}_${dateStr}`;
-                      const entry = hoursMap[key];
-                      const currentVal = mode === 'plan'
-                        ? (entry?.planned_hours ?? 0)
-                        : (entry?.recorded_hours ?? 0);
-                      const plannedVal = entry?.planned_hours ?? 0;
 
-                      return (
-                        <HourCell
-                          key={dateStr}
-                          value={currentVal}
-                          plannedValue={plannedVal}
-                          mode={mode}
+                    {/* 7 day cells + block overlays in a relative container */}
+                    <div className="col-span-7 relative">
+                      <div className="grid grid-cols-7">
+                        {days.map((day, dayIdx) => {
+                          const dateStr = format(day, 'yyyy-MM-dd');
+                          const key = `${project.id}_${dateStr}`;
+                          const entry = hoursMap[key];
+                          const currentVal = mode === 'plan'
+                            ? (entry?.planned_hours ?? 0)
+                            : (entry?.recorded_hours ?? 0);
+                          const plannedVal = entry?.planned_hours ?? 0;
+                          const isCovered = coveredDates.has(dateStr);
+
+                          return (
+                            <HourCell
+                              key={dateStr}
+                              value={currentVal}
+                              plannedValue={plannedVal}
+                              mode={mode}
+                              color={colors.bg}
+                              dimmed={!isSameMonth(day, currentMonth)}
+                              onChange={(v) => handleHourChange(project.id, dateStr, v)}
+                              coveredByBlock={isCovered}
+                              isDragHighlighted={dragIndices?.has(dayIdx) ?? false}
+                              onDragStart={() => startDrag(project.id, dayIdx, weekKey)}
+                              onDragEnter={() => enterDrag(project.id, dayIdx)}
+                            />
+                          );
+                        })}
+                      </div>
+
+                      {/* Render existing blocks */}
+                      {existingBlocks.map((block, idx) => {
+                        const startCol = days.findIndex((d) => format(d, 'yyyy-MM-dd') === block.dates[0]);
+                        const endCol = days.findIndex((d) => format(d, 'yyyy-MM-dd') === block.dates[block.dates.length - 1]);
+                        return (
+                          <HourBlock
+                            key={`block-${idx}`}
+                            block={block}
+                            color={colors.bg}
+                            borderColor={colors.border}
+                            startCol={startCol}
+                            endCol={endCol}
+                            onDistributionChange={(dist) => handleBlockDistribution(project.id, dist)}
+                          />
+                        );
+                      })}
+
+                      {/* Render new block from drag */}
+                      {isNewBlockHere && resolvedNewBlock && (
+                        <HourBlock
+                          block={{
+                            projectId: project.id,
+                            dates: resolvedNewBlock.dates,
+                            distribution: Object.fromEntries(resolvedNewBlock.dates.map((d) => [d, 0])),
+                          }}
                           color={colors.bg}
-                          dimmed={!isSameMonth(day, currentMonth)}
-                          onChange={(v) => handleHourChange(project.id, dateStr, v)}
-                          isDragHighlighted={dragState?.projectId === project.id && dragState.dates.has(dateStr)}
-                          onDragStart={() => startDrag(project.id, dateStr, currentVal)}
-                          onDragEnter={() => enterDrag(project.id, dateStr)}
+                          borderColor={colors.border}
+                          startCol={days.findIndex((d) => format(d, 'yyyy-MM-dd') === resolvedNewBlock!.dates[0])}
+                          endCol={days.findIndex((d) => format(d, 'yyyy-MM-dd') === resolvedNewBlock!.dates[resolvedNewBlock!.dates.length - 1])}
+                          isNew
+                          onDistributionChange={(dist) => {
+                            handleBlockDistribution(project.id, dist);
+                            (window as any).__hourBlockDragIndices = undefined;
+                          }}
                         />
-                      );
-                    })}
+                      )}
+
+                      {/* Render drag preview */}
+                      {dragIndices && dragIndices.size >= 2 && dragState?.projectId === project.id && (
+                        (() => {
+                          const sorted = Array.from(dragIndices).sort((a, b) => a - b);
+                          const sCol = sorted[0];
+                          const eCol = sorted[sorted.length - 1];
+                          const leftPct = (sCol / 7) * 100;
+                          const widthPct = ((eCol - sCol + 1) / 7) * 100;
+                          return (
+                            <div
+                              className="absolute top-0 bottom-0 z-5 flex items-center justify-center pointer-events-none"
+                              style={{
+                                left: `${leftPct}%`,
+                                width: `${widthPct}%`,
+                                padding: '2px',
+                              }}
+                            >
+                              <div
+                                className="w-full h-[28px] rounded-md border-2 border-dashed opacity-60"
+                                style={{
+                                  backgroundColor: `${colors.bg}20`,
+                                  borderColor: colors.border,
+                                }}
+                              />
+                            </div>
+                          );
+                        })()
+                      )}
+                    </div>
+
                     <div className="px-1 py-1 text-center font-medium border-l tabular-nums">
                       {rowTotal > 0 ? rowTotal : ''}
                     </div>
@@ -229,7 +407,7 @@ const PersonalSchedule = () => {
               });
             })}
 
-            {/* Daily Normal Hours row */}
+            {/* Normal Hours row */}
             <div className="grid grid-cols-[180px_repeat(7,1fr)_80px] text-xs font-semibold bg-muted/30 border-t">
               <div className="px-2 py-1 border-r">Normal Hours</div>
               {days.map((day) => {
@@ -254,7 +432,7 @@ const PersonalSchedule = () => {
               </div>
             </div>
 
-            {/* Daily OT Hours row */}
+            {/* OT Hours row */}
             <div className="grid grid-cols-[180px_repeat(7,1fr)_80px] text-xs font-semibold bg-muted/30 border-t">
               <div className="px-2 py-1 border-r">OT Hours</div>
               {days.map((day) => {

@@ -69,6 +69,15 @@ const TaskGantt: React.FC<Props> = ({ tasks, projectId, projectName, users, onTo
   const [dragEnd, setDragEnd] = useState<number | null>(null);
   const [needsDrag, setNeedsDrag] = useState<string | null>(null);
 
+  // Resize drag state
+  const [resizeDrag, setResizeDrag] = useState<{
+    groupIdx: number;
+    direction: 'start' | 'end';
+    originalStart: number;
+    originalEnd: number;
+    currentCol: number;
+  } | null>(null);
+
   // Editing task description state
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editingDesc, setEditingDesc] = useState('');
@@ -232,15 +241,10 @@ const TaskGantt: React.FC<Props> = ({ tasks, projectId, projectName, users, onTo
     setNeedsDrag(null);
   };
 
-  // Resize task bar by extending/shrinking from edges
-  const handleBarResize = useCallback(async (taskId: string, startDate: string | null, endDate: string | null, direction: 'start' | 'end') => {
-    const toLocalDate = (s: string) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
-    if (direction === 'start' && startDate) {
-      const newStart = format(addDays(toLocalDate(startDate), -1), 'yyyy-MM-dd');
-      await updateDates.mutateAsync({ id: taskId, start_date: newStart, end_date: endDate });
-    } else if (direction === 'end' && endDate) {
-      const newEnd = format(addDays(toLocalDate(endDate), 1), 'yyyy-MM-dd');
-      await updateDates.mutateAsync({ id: taskId, start_date: startDate, end_date: newEnd });
+  // Resize task bar by extending/shrinking from edges (updates all tasks in group)
+  const handleBarResize = useCallback(async (group: { tasks: TaskRow[]; userIds: string[] }, newStartDate: string, newEndDate: string) => {
+    for (const t of group.tasks) {
+      await updateDates.mutateAsync({ id: t.id, start_date: newStartDate, end_date: newEndDate });
     }
   }, [updateDates]);
 
@@ -259,11 +263,47 @@ const TaskGantt: React.FC<Props> = ({ tasks, projectId, projectName, users, onTo
     setEditingTaskId(null);
   }, [tasks, queryClient]);
 
+  // Handle resize drag end
+  const handleResizeEnd = useCallback(async () => {
+    if (!resizeDrag) return;
+    const group = groupedTasks[resizeDrag.groupIdx];
+    if (!group) { setResizeDrag(null); return; }
+
+    let newStart = resizeDrag.originalStart;
+    let newEnd = resizeDrag.originalEnd;
+    if (resizeDrag.direction === 'start') {
+      newStart = Math.min(resizeDrag.currentCol, resizeDrag.originalEnd);
+    } else {
+      newEnd = Math.max(resizeDrag.currentCol, resizeDrag.originalStart);
+    }
+
+    const startDate = format(allDays[Math.max(0, Math.min(newStart, totalDays - 1))], 'yyyy-MM-dd');
+    const endDate = format(allDays[Math.max(0, Math.min(newEnd, totalDays - 1))], 'yyyy-MM-dd');
+    await handleBarResize(group, startDate, endDate);
+    setResizeDrag(null);
+  }, [resizeDrag, groupedTasks, allDays, totalDays, handleBarResize]);
+
   useEffect(() => {
-    const up = () => { if (dragTask) handleDragEnd(); };
+    const up = () => {
+      if (dragTask) handleDragEnd();
+      if (resizeDrag) handleResizeEnd();
+    };
+    const move = (e: MouseEvent) => {
+      if (resizeDrag) {
+        // Find the gantt container to compute column from mouse position
+        const container = document.querySelector('[data-gantt-grid]');
+        if (container) {
+          const rect = container.getBoundingClientRect();
+          const x = e.clientX - rect.left;
+          const dayIdx = Math.max(0, Math.min(totalDays - 1, Math.floor((x / rect.width) * totalDays)));
+          setResizeDrag(prev => prev ? { ...prev, currentCol: dayIdx } : null);
+        }
+      }
+    };
     window.addEventListener('mouseup', up);
-    return () => window.removeEventListener('mouseup', up);
-  }, [dragTask, dragEnd]);
+    window.addEventListener('mousemove', move);
+    return () => { window.removeEventListener('mouseup', up); window.removeEventListener('mousemove', move); };
+  }, [dragTask, dragEnd, resizeDrag, handleResizeEnd, totalDays]);
 
   const toggleUserSelection = (uid: string) => {
     setNewUserIds(prev => prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]);
@@ -353,6 +393,20 @@ const TaskGantt: React.FC<Props> = ({ tasks, projectId, projectName, users, onTo
               dragEndCol = Math.max(dragTask!.startCol, dragEnd);
             }
 
+            // If this group is being resize-dragged, compute visual block
+            const isResizing = resizeDrag?.groupIdx === groupIdx;
+            let visualStart = blockStart;
+            let visualEnd = blockEnd;
+            if (isResizing) {
+              if (resizeDrag!.direction === 'start') {
+                visualStart = Math.min(resizeDrag!.currentCol, resizeDrag!.originalEnd);
+                visualEnd = resizeDrag!.originalEnd;
+              } else {
+                visualStart = resizeDrag!.originalStart;
+                visualEnd = Math.max(resizeDrag!.currentCol, resizeDrag!.originalStart);
+              }
+            }
+
             const allCompleted = group.tasks.every(t => t.is_completed);
             const userNames = group.userIds.map(uid => users.find(u => u.id === uid)?.name ?? '').filter(Boolean);
             const isEditing = editingTaskId === primaryTask.id;
@@ -399,7 +453,9 @@ const TaskGantt: React.FC<Props> = ({ tasks, projectId, projectName, users, onTo
                 </div>
                 <div
                   className="flex-1 relative min-h-[32px] flex items-center"
+                  data-gantt-grid
                   onMouseDown={(e) => {
+                    if (resizeDrag) return; // don't start drag while resizing
                     if (needsDrag === primaryTask.id || !hasDates) {
                       const rect = e.currentTarget.getBoundingClientRect();
                       const x = e.clientX - rect.left;
@@ -430,8 +486,8 @@ const TaskGantt: React.FC<Props> = ({ tasks, projectId, projectName, users, onTo
                     <div
                       className="absolute top-1 bottom-1 rounded-md flex items-center justify-center text-[9px] text-white font-medium px-1 truncate group/bar"
                       style={{
-                        left: `${(blockStart / totalDays) * 100}%`,
-                        width: `${((blockEnd - blockStart + 1) / totalDays) * 100}%`,
+                        left: `${(visualStart / totalDays) * 100}%`,
+                        width: `${((visualEnd - visualStart + 1) / totalDays) * 100}%`,
                         backgroundColor: color,
                         opacity: allCompleted ? 0.5 : 1,
                       }}
@@ -440,22 +496,29 @@ const TaskGantt: React.FC<Props> = ({ tasks, projectId, projectName, users, onTo
                         setEditingDesc(primaryTask.description);
                       }}
                     >
-                      {/* Left resize handle */}
-                      <button
-                        className="absolute left-0 top-0 bottom-0 w-3 flex items-center justify-center opacity-0 group-hover/bar:opacity-100 cursor-ew-resize z-20 hover:bg-white/20 rounded-l-md transition-opacity"
-                        onClick={(e) => {
+                      {/* Left resize handle - drag based */}
+                      <div
+                        className="absolute left-0 top-0 bottom-0 w-4 flex items-center justify-center opacity-0 group-hover/bar:opacity-100 cursor-ew-resize z-20 hover:bg-white/20 rounded-l-md transition-opacity"
+                        onMouseDown={(e) => {
                           e.stopPropagation();
-                          handleBarResize(primaryTask.id, primaryTask.start_date, primaryTask.end_date, 'start');
+                          e.preventDefault();
+                          setResizeDrag({
+                            groupIdx,
+                            direction: 'start',
+                            originalStart: blockStart,
+                            originalEnd: blockEnd,
+                            currentCol: blockStart,
+                          });
                         }}
-                        title="Extend start date"
+                        title="Drag to adjust start date"
                       >
                         <ChevronLeft className="w-3 h-3 text-white" />
-                      </button>
+                      </div>
 
                       {/* Deadline dots inside the task bar */}
-                      {deadlinePositions.filter(dl => dl.col >= blockStart && dl.col <= blockEnd).map((dl, idx) => {
-                        const barWidth = blockEnd - blockStart + 1;
-                        const posInBar = ((dl.col - blockStart + 0.5) / barWidth) * 100;
+                      {deadlinePositions.filter(dl => dl.col >= visualStart && dl.col <= visualEnd).map((dl, idx) => {
+                        const barWidth = visualEnd - visualStart + 1;
+                        const posInBar = ((dl.col - visualStart + 0.5) / barWidth) * 100;
                         return (
                           <Tooltip key={`dldot-${idx}`}>
                             <TooltipTrigger asChild>
@@ -478,17 +541,24 @@ const TaskGantt: React.FC<Props> = ({ tasks, projectId, projectName, users, onTo
 
                       <span className="truncate">{primaryTask.description}</span>
 
-                      {/* Right resize handle */}
-                      <button
-                        className="absolute right-0 top-0 bottom-0 w-3 flex items-center justify-center opacity-0 group-hover/bar:opacity-100 cursor-ew-resize z-20 hover:bg-white/20 rounded-r-md transition-opacity"
-                        onClick={(e) => {
+                      {/* Right resize handle - drag based */}
+                      <div
+                        className="absolute right-0 top-0 bottom-0 w-4 flex items-center justify-center opacity-0 group-hover/bar:opacity-100 cursor-ew-resize z-20 hover:bg-white/20 rounded-r-md transition-opacity"
+                        onMouseDown={(e) => {
                           e.stopPropagation();
-                          handleBarResize(primaryTask.id, primaryTask.start_date, primaryTask.end_date, 'end');
+                          e.preventDefault();
+                          setResizeDrag({
+                            groupIdx,
+                            direction: 'end',
+                            originalStart: blockStart,
+                            originalEnd: blockEnd,
+                            currentCol: blockEnd,
+                          });
                         }}
-                        title="Extend end date"
+                        title="Drag to adjust end date"
                       >
                         <ChevronRight className="w-3 h-3 text-white" />
-                      </button>
+                      </div>
                     </div>
                   )}
 

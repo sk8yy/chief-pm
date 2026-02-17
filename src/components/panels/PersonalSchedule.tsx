@@ -86,21 +86,27 @@ const PersonalSchedule = () => {
   // Track newly created blocks waiting for total input
   const [newBlock, setNewBlock] = useState<{
     projectId: string;
-    dates: string[];
+    dayIndices: number[];
     weekKey: string;
   } | null>(null);
 
+  // Finalize drag into a newBlock on mouseup
   useEffect(() => {
-    const handleMouseUp = () => {
+    const handleUp = () => {
       const ds = dragStateRef.current;
-      if (ds && ds.dayIndices.size >= 2) {
-        // Will be handled by the component via newBlock state set in the render
-        // We signal by keeping dragState briefly — the render picks it up
+      if (!ds) return;
+      setDragState(null);
+      if (ds.dayIndices.size >= 2) {
+        const sorted = Array.from(ds.dayIndices).sort((a, b) => a - b);
+        setNewBlock({
+          projectId: ds.projectId,
+          dayIndices: sorted,
+          weekKey: ds.weekKey,
+        });
       }
-      // dragState cleared after render picks up
     };
-    window.addEventListener('mouseup', handleMouseUp);
-    return () => window.removeEventListener('mouseup', handleMouseUp);
+    window.addEventListener('mouseup', handleUp);
+    return () => window.removeEventListener('mouseup', handleUp);
   }, []);
 
   const groupedProjects = useMemo(() => {
@@ -137,29 +143,10 @@ const PersonalSchedule = () => {
     setNewBlock(null);
   }, [handleHourChange]);
 
-  // Finalize drag into a newBlock on mouseup
-  useEffect(() => {
-    const handleUp = () => {
-      const ds = dragStateRef.current;
-      if (!ds) return;
-      if (ds.dayIndices.size >= 2) {
-        // We need the days array for this week — store minimal info and resolve in render
-        setDragState(null);
-        // Store the drag result as newBlock
-        setNewBlock({
-          projectId: ds.projectId,
-          dates: [], // placeholder, resolved per-week in render
-          weekKey: ds.weekKey,
-        });
-        // We need actual dates — store indices temporarily
-        (window as any).__hourBlockDragIndices = Array.from(ds.dayIndices).sort((a, b) => a - b);
-      } else {
-        setDragState(null);
-      }
-    };
-    window.addEventListener('mouseup', handleUp);
-    return () => window.removeEventListener('mouseup', handleUp);
-  }, []);
+  const handleBlockDelete = useCallback((projectId: string, dates: string[]) => {
+    dates.forEach((date) => handleHourChange(projectId, date, 0));
+    setNewBlock(null);
+  }, [handleHourChange]);
 
   const startDrag = useCallback((projectId: string, dayIndex: number, weekKey: string) => {
     setDragState({ projectId, dayIndices: new Set([dayIndex]), weekKey });
@@ -208,16 +195,13 @@ const PersonalSchedule = () => {
         // Resolve newBlock dates if this is the target week
         let resolvedNewBlock: { projectId: string; dates: string[] } | null = null;
         if (newBlock && newBlock.weekKey === weekKey) {
-          const indices: number[] = (window as any).__hourBlockDragIndices ?? [];
-          if (indices.length >= 2) {
-            const minI = indices[0];
-            const maxI = indices[indices.length - 1];
-            const dates: string[] = [];
-            for (let i = minI; i <= maxI; i++) {
-              dates.push(format(days[i], 'yyyy-MM-dd'));
-            }
-            resolvedNewBlock = { projectId: newBlock.projectId, dates };
+          const minI = newBlock.dayIndices[0];
+          const maxI = newBlock.dayIndices[newBlock.dayIndices.length - 1];
+          const dates: string[] = [];
+          for (let i = minI; i <= maxI; i++) {
+            dates.push(format(days[i], 'yyyy-MM-dd'));
           }
+          resolvedNewBlock = { projectId: newBlock.projectId, dates };
         }
 
         let weekTotal = 0;
@@ -345,6 +329,7 @@ const PersonalSchedule = () => {
                             startCol={startCol}
                             endCol={endCol}
                             onDistributionChange={(dist) => handleBlockDistribution(project.id, dist)}
+                            onDelete={() => handleBlockDelete(project.id, block.dates)}
                           />
                         );
                       })}
@@ -364,7 +349,9 @@ const PersonalSchedule = () => {
                           isNew
                           onDistributionChange={(dist) => {
                             handleBlockDistribution(project.id, dist);
-                            (window as any).__hourBlockDragIndices = undefined;
+                          }}
+                          onDelete={() => {
+                            if (resolvedNewBlock) handleBlockDelete(project.id, resolvedNewBlock.dates);
                           }}
                         />
                       )}

@@ -6,6 +6,7 @@ import { useDisciplines } from '@/hooks/useDisciplines';
 import { useHours, useUpsertHours } from '@/hooks/useHours';
 import { useUserAssignments, useAssignMember } from '@/hooks/useAssignments';
 import { useAllDeadlines, useAddDeadline } from '@/hooks/useDeadlines';
+import { getCategoryMeta, DEADLINE_CATEGORIES, autoCategorize, DeadlineCategory } from '@/lib/deadlineCategories';
 import { useAllTasks, useToggleTask } from '@/hooks/useTasks';
 import TaskList from './TaskList';
 import { getDisciplineColor, getDisciplineColorRecord } from '@/lib/colors';
@@ -69,6 +70,7 @@ const PersonalSchedule = () => {
   const [deadlineName, setDeadlineName] = useState('');
   const [deadlineDate, setDeadlineDate] = useState('');
   const [deadlineProjectId, setDeadlineProjectId] = useState('');
+  const [deadlineCategory, setDeadlineCategory] = useState<DeadlineCategory>('due');
   const { data: projects } = useProjects();
   const { data: disciplines } = useDisciplines();
 
@@ -95,10 +97,10 @@ const PersonalSchedule = () => {
 
   // Map deadlines by date string for quick lookup
   const deadlinesByDate = useMemo(() => {
-    const map: Record<string, Array<{ name: string; projectName: string }>> = {};
+    const map: Record<string, Array<{ name: string; projectName: string; category: string }>> = {};
     allDeadlines?.forEach((d: any) => {
       if (!map[d.date]) map[d.date] = [];
-      map[d.date].push({ name: d.name, projectName: d.projects?.name ?? 'Unknown' });
+      map[d.date].push({ name: d.name, projectName: d.projects?.name ?? 'Unknown', category: (d as any).category ?? 'due' });
     });
     return map;
   }, [allDeadlines]);
@@ -110,12 +112,14 @@ const PersonalSchedule = () => {
       date: deadlineDate,
       project_id: deadlineProjectId,
       created_by: currentUserId,
+      category: deadlineCategory,
     });
     setDeadlineName('');
     setDeadlineDate('');
     setDeadlineProjectId('');
+    setDeadlineCategory('due');
     setShowAddDeadline(false);
-  }, [deadlineName, deadlineDate, deadlineProjectId, currentUserId, addDeadlineMut]);
+  }, [deadlineName, deadlineDate, deadlineProjectId, deadlineCategory, currentUserId, addDeadlineMut]);
 
   // Build set of assigned project IDs across all visible weeks
   // Include projects from both assignments AND hours data (hours may exist without assignments)
@@ -283,7 +287,10 @@ const PersonalSchedule = () => {
           <Input
             placeholder="Deadline name"
             value={deadlineName}
-            onChange={(e) => setDeadlineName(e.target.value)}
+            onChange={(e) => {
+              setDeadlineName(e.target.value);
+              setDeadlineCategory(autoCategorize(e.target.value));
+            }}
             className="h-8 text-xs flex-1 max-w-[200px]"
           />
           <Input
@@ -299,6 +306,16 @@ const PersonalSchedule = () => {
             <SelectContent>
               {projects?.map((p) => (
                 <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={deadlineCategory} onValueChange={(v) => setDeadlineCategory(v as DeadlineCategory)}>
+            <SelectTrigger className="h-8 text-xs w-[150px]">
+              <SelectValue placeholder="Category" />
+            </SelectTrigger>
+            <SelectContent>
+              {DEADLINE_CATEGORIES.map(c => (
+                <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -388,15 +405,18 @@ const PersonalSchedule = () => {
                       {dayDeadlines && dayDeadlines.length > 0 && (
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <span className="w-2 h-2 rounded-full bg-destructive inline-block shrink-0 cursor-help" />
+                            <span className="w-2 h-2 rounded-sm bg-destructive inline-block shrink-0 cursor-help" />
                           </TooltipTrigger>
                           <TooltipContent side="top" className="max-w-[200px]">
-                            {dayDeadlines.map((dl, i) => (
-                              <div key={i} className="text-xs">
-                                <span className="font-medium">{dl.name}</span>
-                                <span className="text-muted-foreground ml-1">({dl.projectName})</span>
-                              </div>
-                            ))}
+                            {dayDeadlines.map((dl, i) => {
+                              const cat = getCategoryMeta(dl.category);
+                              return (
+                                <div key={i} className="text-xs">
+                                  <span className="font-medium">{dl.name}</span>
+                                  <span className="text-muted-foreground ml-1">({cat.label} · {dl.projectName})</span>
+                                </div>
+                              );
+                            })}
                           </TooltipContent>
                         </Tooltip>
                       )}

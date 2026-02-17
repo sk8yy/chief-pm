@@ -254,6 +254,7 @@ const StickerWall: React.FC = () => {
             created_by: effectiveUserId,
             type: 'project' as const,
             visible_to: d.visible_to?.length ? d.visible_to : null,
+            category: d.category ?? 'due',
           }));
         if (rows.length) {
           const { error } = await supabase.from('deadlines').insert(rows as any);

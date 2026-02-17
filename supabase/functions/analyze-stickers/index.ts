@@ -60,6 +60,7 @@ Rules:
 - If no project match, set project_id to null.
 - If no user match, set user_id to null but keep the person's name in assigned_person_name.
 - Each extracted item should reference which sticker it came from.
+- For each deadline, categorize it as one of: "internal_meeting" (team meetings, standups, syncs), "external_meeting" (client meetings, presentations), "submission" (deliverables, handovers), or "due" (generic due dates).
 - Be conservative: only extract clear, actionable items. Don't invent data.
 - For tasks: extract start_date and end_date when possible.
   - If the sticker mentions a submission date, due date, or deadline for a task, use it as end_date.
@@ -114,6 +115,7 @@ IMPORTANT - Existing task awareness:
                         project_id: { type: "string", description: "Matched project ID or null" },
                         project_name: { type: "string", description: "Project name for display" },
                         source_sticker_index: { type: "number", description: "1-based sticker index" },
+                        category: { type: "string", enum: ["internal_meeting", "external_meeting", "submission", "due"], description: "Deadline category" },
                       },
                       required: ["name", "date", "source_sticker_index"],
                       additionalProperties: false,

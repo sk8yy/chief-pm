@@ -36,14 +36,15 @@ export function useAllDeadlines(dateRange: { start: string; end: string }) {
 export function useAddDeadline() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (params: { name: string; date: string; project_id: string; created_by: string }) => {
+    mutationFn: async (params: { name: string; date: string; project_id: string; created_by: string; category?: string }) => {
       const { error } = await supabase.from('deadlines').insert({
         name: params.name,
         date: params.date,
         project_id: params.project_id,
         created_by: params.created_by,
         type: 'project',
-      });
+        category: params.category ?? 'due',
+      } as any);
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['deadlines'] }),

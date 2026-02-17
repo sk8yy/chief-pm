@@ -19,7 +19,7 @@ interface HourBlockProps {
   isNew?: boolean;
   onDistributionChange: (distribution: Record<string, number>) => void;
   onDelete?: () => void;
-  onResize?: (direction: 'start' | 'end') => void;
+  onResizeDrag?: (direction: 'start' | 'end', newCol: number) => void;
 }
 
 /** Distribute `total` integer hours as evenly as possible across `count` days */
@@ -38,7 +38,7 @@ const HourBlock = ({
   isNew,
   onDistributionChange,
   onDelete,
-  onResize,
+  onResizeDrag,
 }: HourBlockProps) => {
   const total = Object.values(block.distribution).reduce((s, v) => s + v, 0);
   const [showPopover, setShowPopover] = useState(false);
@@ -46,6 +46,7 @@ const HourBlock = ({
   const [inlineEditing, setInlineEditing] = useState(isNew ?? false);
   const [inlineDraft, setInlineDraft] = useState('');
   const inlineRef = useRef<HTMLInputElement>(null);
+  const [resizing, setResizing] = useState<{ direction: 'start' | 'end' } | null>(null);
 
   useEffect(() => {
     if (inlineEditing) {
@@ -58,6 +59,28 @@ const HourBlock = ({
       setLocalDist({ ...block.distribution });
     }
   }, [showPopover]);
+
+  // Drag-based resize: track mouse and compute column from parent container
+  useEffect(() => {
+    if (!resizing || !onResizeDrag) return;
+    const handleMouseMove = (e: MouseEvent) => {
+      // Find the parent 7-col container (col-span-7 relative)
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      const container = el?.closest('[data-block-grid]') as HTMLElement | null;
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const col = Math.max(0, Math.min(6, Math.floor((x / rect.width) * 7)));
+      onResizeDrag(resizing.direction, col);
+    };
+    const handleMouseUp = () => setResizing(null);
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [resizing, onResizeDrag]);
 
   const commitInline = useCallback(() => {
     setInlineEditing(false);
@@ -138,30 +161,30 @@ const HourBlock = ({
             )}
 
             {/* Left resize handle */}
-            {onResize && !inlineEditing && (
+            {onResizeDrag && !inlineEditing && (
               <div
                 className="absolute left-0 top-0 bottom-0 w-4 flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-ew-resize z-20 hover:bg-black/10 rounded-l-md transition-opacity"
                 onMouseDown={(e) => {
                   e.stopPropagation();
                   e.preventDefault();
-                  onResize('start');
+                  setResizing({ direction: 'start' });
                 }}
-                title="Extend left"
+                title="Drag to adjust start"
               >
                 <ChevronLeft className="w-3 h-3" />
               </div>
             )}
 
             {/* Right resize handle */}
-            {onResize && !inlineEditing && (
+            {onResizeDrag && !inlineEditing && (
               <div
                 className="absolute right-0 top-0 bottom-0 w-4 flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-ew-resize z-20 hover:bg-black/10 rounded-r-md transition-opacity"
                 onMouseDown={(e) => {
                   e.stopPropagation();
                   e.preventDefault();
-                  onResize('end');
+                  setResizing({ direction: 'end' });
                 }}
-                title="Extend right"
+                title="Drag to adjust end"
               >
                 <ChevronRight className="w-3 h-3" />
               </div>

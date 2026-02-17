@@ -305,6 +305,7 @@ const ProjectManagement = () => {
               <div className="space-y-1">
                 <label className="text-xs text-muted-foreground">Project Name</label>
                 <Input
+                  key={`name-${selectedProjectId}`}
                   defaultValue={selectedProject.name}
                   onBlur={(e) => handleFieldUpdate('name', e.target.value)}
                 />
@@ -312,6 +313,7 @@ const ProjectManagement = () => {
               <div className="space-y-1">
                 <label className="text-xs text-muted-foreground">Job Number</label>
                 <Input
+                  key={`job-${selectedProjectId}`}
                   defaultValue={selectedProject.job_number}
                   onBlur={(e) => handleFieldUpdate('job_number', e.target.value)}
                 />
@@ -347,6 +349,7 @@ const ProjectManagement = () => {
               <div className="space-y-1">
                 <label className="text-xs text-muted-foreground">Start Date</label>
                 <Input
+                  key={`start-${selectedProjectId}`}
                   type="date"
                   defaultValue={(selectedProject as any).start_date ?? ''}
                   onBlur={(e) => handleFieldUpdate('start_date', e.target.value)}
@@ -355,6 +358,7 @@ const ProjectManagement = () => {
               <div className="space-y-1">
                 <label className="text-xs text-muted-foreground">End Date</label>
                 <Input
+                  key={`end-${selectedProjectId}`}
                   type="date"
                   defaultValue={(selectedProject as any).end_date ?? ''}
                   onBlur={(e) => handleFieldUpdate('end_date', e.target.value)}

@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addMonths, subMonths, eachWeekOfInterval, eachDayOfInterval, isSameMonth } from 'date-fns';
 import { useAppContext } from '@/contexts/AppContext';
 import { useProjects } from '@/hooks/useProjects';
@@ -33,6 +33,43 @@ const PersonalSchedule = () => {
 
   const { data: hours } = useHours(currentUserId, dateRange);
   const upsertHours = useUpsertHours();
+
+  // Drag-to-fill state
+  const [dragState, setDragState] = useState<{
+    projectId: string;
+    dates: Set<string>;
+    fillValue: number;
+  } | null>(null);
+  const dragStateRef = useRef(dragState);
+  dragStateRef.current = dragState;
+
+  useEffect(() => {
+    const handleMouseUp = () => {
+      const ds = dragStateRef.current;
+      if (ds && ds.dates.size > 0) {
+        ds.dates.forEach((dateStr) => {
+          handleHourChange(ds.projectId, dateStr, ds.fillValue);
+        });
+      }
+      setDragState(null);
+    };
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => window.removeEventListener('mouseup', handleMouseUp);
+  }, []);
+
+  const startDrag = useCallback((projectId: string, dateStr: string, currentVal: number) => {
+    const fillValue = currentVal > 0 ? 0 : 8;
+    setDragState({ projectId, dates: new Set([dateStr]), fillValue });
+  }, []);
+
+  const enterDrag = useCallback((projectId: string, dateStr: string) => {
+    setDragState((prev) => {
+      if (!prev || prev.projectId !== projectId) return prev;
+      const next = new Set(prev.dates);
+      next.add(dateStr);
+      return { ...prev, dates: next };
+    });
+  }, []);
 
   // Group projects by discipline
   const groupedProjects = useMemo(() => {
@@ -178,6 +215,9 @@ const PersonalSchedule = () => {
                           color={colors.bg}
                           dimmed={!isSameMonth(day, currentMonth)}
                           onChange={(v) => handleHourChange(project.id, dateStr, v)}
+                          isDragHighlighted={dragState?.projectId === project.id && dragState.dates.has(dateStr)}
+                          onDragStart={() => startDrag(project.id, dateStr, currentVal)}
+                          onDragEnter={() => enterDrag(project.id, dateStr)}
                         />
                       );
                     })}

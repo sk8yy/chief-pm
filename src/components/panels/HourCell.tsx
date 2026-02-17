@@ -8,9 +8,12 @@ interface HourCellProps {
   color: string;
   dimmed: boolean;
   onChange: (v: number) => void;
+  isDragHighlighted?: boolean;
+  onDragStart?: () => void;
+  onDragEnter?: () => void;
 }
 
-const HourCell = ({ value, plannedValue, mode, color, dimmed, onChange }: HourCellProps) => {
+const HourCell = ({ value, plannedValue, mode, color, dimmed, onChange, isDragHighlighted, onDragStart, onDragEnter }: HourCellProps) => {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -31,13 +34,30 @@ const HourCell = ({ value, plannedValue, mode, color, dimmed, onChange }: HourCe
 
   return (
     <div
-      className={`border-r min-h-[32px] flex items-center justify-center cursor-pointer transition-colors ${dimmed ? 'opacity-40' : ''}`}
-      style={value > 0 ? { backgroundColor: `${color}30` } : undefined}
+      className={`border-r min-h-[32px] flex items-center justify-center cursor-pointer transition-colors select-none ${dimmed ? 'opacity-40' : ''}`}
+      style={{
+        backgroundColor: isDragHighlighted
+          ? `${color}50`
+          : value > 0
+            ? `${color}30`
+            : undefined,
+        outline: isDragHighlighted ? `2px solid ${color}` : undefined,
+        outlineOffset: '-2px',
+      }}
       onClick={() => {
         if (!editing) {
           setDraft(value > 0 ? String(value) : '');
           setEditing(true);
         }
+      }}
+      onMouseDown={(e) => {
+        if (e.button === 0 && !editing) {
+          e.preventDefault();
+          onDragStart?.();
+        }
+      }}
+      onMouseEnter={() => {
+        onDragEnter?.();
       }}
     >
       {editing ? (

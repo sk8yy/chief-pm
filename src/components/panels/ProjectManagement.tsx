@@ -481,6 +481,7 @@ const ProjectManagement = () => {
               projectName={selectedProject?.name ?? ''}
               users={users ?? []}
               onToggle={(id, is_completed) => toggleTask.mutate({ id, is_completed })}
+              deadlines={deadlines?.map(d => ({ id: d.id, date: d.date, name: d.name, category: (d as any).category ?? 'due' })) ?? []}
             />
           </section>
 

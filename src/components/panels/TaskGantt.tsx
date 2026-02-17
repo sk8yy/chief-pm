@@ -1,10 +1,10 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { format, startOfWeek, endOfWeek, addWeeks, eachDayOfInterval, eachWeekOfInterval, differenceInDays, isBefore, isAfter, parseISO } from 'date-fns';
+import { format, startOfWeek, endOfWeek, addWeeks, addDays, eachDayOfInterval, eachWeekOfInterval, differenceInDays, isBefore, isAfter, parseISO } from 'date-fns';
 import { TaskRow, useCreateTask, useDeleteTask, useToggleTask, useUpdateTaskDates } from '@/hooks/useTasks';
+import { getCategoryMeta } from '@/lib/deadlineCategories';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
@@ -12,7 +12,8 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, Minus, X, ListTodo } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
+import { Plus, Minus, X, ListTodo, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
@@ -33,15 +34,23 @@ interface User {
   name: string;
 }
 
+interface DeadlineItem {
+  id: string;
+  date: string;
+  name: string;
+  category: string;
+}
+
 interface Props {
   tasks: TaskRow[];
   projectId: string;
   projectName: string;
   users: User[];
   onToggle: (id: string, is_completed: boolean) => void;
+  deadlines?: DeadlineItem[];
 }
 
-const TaskGantt: React.FC<Props> = ({ tasks, projectId, projectName, users, onToggle }) => {
+const TaskGantt: React.FC<Props> = ({ tasks, projectId, projectName, users, onToggle, deadlines }) => {
   const createTask = useCreateTask();
   const deleteTask = useDeleteTask();
   const updateDates = useUpdateTaskDates();
@@ -59,6 +68,10 @@ const TaskGantt: React.FC<Props> = ({ tasks, projectId, projectName, users, onTo
   const [dragTask, setDragTask] = useState<{ taskId: string; startCol: number } | null>(null);
   const [dragEnd, setDragEnd] = useState<number | null>(null);
   const [needsDrag, setNeedsDrag] = useState<string | null>(null);
+
+  // Editing task description state
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editingDesc, setEditingDesc] = useState('');
 
   const { weeks, allDays, weekStart: calStart } = useMemo(() => {
     const today = new Date();
@@ -94,6 +107,15 @@ const TaskGantt: React.FC<Props> = ({ tasks, projectId, projectName, users, onTo
     return differenceInDays(parseISO(dateStr), calStart);
   }, [calStart]);
 
+  // Deadline positions mapped by column index
+  const deadlinePositions = useMemo(() => {
+    if (!deadlines) return [];
+    return deadlines.map(dl => ({
+      ...dl,
+      col: getDateCol(dl.date),
+    })).filter(dl => dl.col >= 0 && dl.col < totalDays);
+  }, [deadlines, getDateCol, totalDays]);
+
   // Group tasks by description+project to show multiple persons
   const groupedTasks = useMemo(() => {
     const groups: Record<string, { tasks: TaskRow[]; userIds: string[] }> = {};
@@ -111,12 +133,11 @@ const TaskGantt: React.FC<Props> = ({ tasks, projectId, projectName, users, onTo
     });
   }, [tasks]);
 
-  // Auto-create/update sticker when tasks are added from Panel 3
+  // Auto-create sticker when tasks are added from Panel 3
   const autoCreateSticker = useCallback(async (description: string) => {
     const today = format(new Date(), 'yyyy-MM-dd');
     const stickerTitle = `${projectName} _New Tasks _${today}`;
 
-    // Check if a sticker for this project+date already exists
     const { data: existing } = await supabase
       .from('stickers')
       .select('id, content')
@@ -125,12 +146,10 @@ const TaskGantt: React.FC<Props> = ({ tasks, projectId, projectName, users, onTo
       .limit(1);
 
     if (existing && existing.length > 0) {
-      // Append to existing sticker
       const sticker = existing[0];
       const newContent = `${sticker.content}\n- ${description}`;
       await supabase.from('stickers').update({ content: newContent }).eq('id', sticker.id);
     } else {
-      // Create new sticker - need a user_id; use first assigned user or first user
       const userId = users[0]?.id;
       if (!userId) return;
       await supabase.from('stickers').insert({
@@ -168,7 +187,6 @@ const TaskGantt: React.FC<Props> = ({ tasks, projectId, projectName, users, onTo
       toast.info('Drag on the calendar to set the task dates.');
     }
 
-    // Auto-create sticker
     await autoCreateSticker(newDesc.trim());
 
     setNewDesc('');
@@ -211,6 +229,32 @@ const TaskGantt: React.FC<Props> = ({ tasks, projectId, projectName, users, onTo
     setNeedsDrag(null);
   };
 
+  // Resize task bar by extending/shrinking from edges
+  const handleBarResize = useCallback(async (taskId: string, startDate: string | null, endDate: string | null, direction: 'start' | 'end') => {
+    if (direction === 'start' && startDate) {
+      const newStart = format(addDays(parseISO(startDate), -1), 'yyyy-MM-dd');
+      await updateDates.mutateAsync({ id: taskId, start_date: newStart, end_date: endDate });
+    } else if (direction === 'end' && endDate) {
+      const newEnd = format(addDays(parseISO(endDate), 1), 'yyyy-MM-dd');
+      await updateDates.mutateAsync({ id: taskId, start_date: startDate, end_date: newEnd });
+    }
+  }, [updateDates]);
+
+  // Update task description
+  const handleDescriptionUpdate = useCallback(async (taskId: string, newDescription: string) => {
+    if (!newDescription.trim()) return;
+    // Update all tasks in the group (same description)
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+    const groupTasks = tasks.filter(t => t.description.toLowerCase().trim() === task.description.toLowerCase().trim() && t.project_id === task.project_id);
+    for (const gt of groupTasks) {
+      await supabase.from('tasks').update({ description: newDescription.trim() }).eq('id', gt.id);
+    }
+    queryClient.invalidateQueries({ queryKey: ['tasks'] });
+    queryClient.invalidateQueries({ queryKey: ['project_tasks'] });
+    setEditingTaskId(null);
+  }, [tasks, queryClient]);
+
   useEffect(() => {
     const up = () => { if (dragTask) handleDragEnd(); };
     window.addEventListener('mouseup', up);
@@ -222,6 +266,7 @@ const TaskGantt: React.FC<Props> = ({ tasks, projectId, projectName, users, onTo
   };
 
   return (
+    <TooltipProvider>
     <div className="space-y-2">
       <div className="flex items-center gap-2">
         <ListTodo className="h-4 w-4 text-primary" />
@@ -263,12 +308,37 @@ const TaskGantt: React.FC<Props> = ({ tasks, projectId, projectName, users, onTo
           {/* Day headers */}
           <div className="flex border-b bg-muted/20">
             <div className="w-[200px] shrink-0 border-r" />
-            <div className="flex-1 flex">
+            <div className="flex-1 flex relative">
               {allDays.map((day, i) => (
                 <div key={i} className="text-[8px] text-center text-muted-foreground border-r py-0.5" style={{ width: `${(1 / totalDays) * 100}%` }}>
                   {format(day, 'd')}
                 </div>
               ))}
+              {/* Deadline markers in day header */}
+              {deadlinePositions.map((dl, idx) => {
+                const cat = getCategoryMeta(dl.category);
+                return (
+                  <Tooltip key={`dlh-${idx}`}>
+                    <TooltipTrigger asChild>
+                      <div
+                        className="absolute bottom-0 z-10 cursor-help"
+                        style={{
+                          left: `${((dl.col + 0.5) / totalDays) * 100}%`,
+                          transform: 'translateX(-50%)',
+                        }}
+                      >
+                        <div className="w-1.5 h-1.5 rounded-sm" style={{ backgroundColor: 'hsl(0 80% 55%)' }} />
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-[200px]">
+                      <div className="text-xs">
+                        <span className="font-medium">{dl.name}</span>
+                        <span className="text-muted-foreground ml-1">({cat.label} · {format(parseISO(dl.date), 'MMM d')})</span>
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                );
+              })}
             </div>
             <div className="w-[36px] shrink-0" />
           </div>
@@ -304,15 +374,37 @@ const TaskGantt: React.FC<Props> = ({ tasks, projectId, projectName, users, onTo
 
             const allCompleted = group.tasks.every(t => t.is_completed);
             const userNames = group.userIds.map(uid => users.find(u => u.id === uid)?.name ?? '').filter(Boolean);
+            const isEditing = editingTaskId === primaryTask.id;
 
             return (
               <div key={primaryTask.id} className="flex border-b last:border-b-0 group/row">
                 <div className="w-[200px] shrink-0 px-2 py-1.5 border-r flex flex-col justify-center gap-0.5">
                   <div className="flex items-center gap-1 text-xs">
                     <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
-                    <span className={`truncate ${allCompleted ? 'line-through text-muted-foreground/60' : ''}`} title={primaryTask.description}>
-                      {primaryTask.description}
-                    </span>
+                    {isEditing ? (
+                      <input
+                        className="flex-1 text-xs bg-transparent border-b border-primary outline-none"
+                        value={editingDesc}
+                        autoFocus
+                        onChange={(e) => setEditingDesc(e.target.value)}
+                        onBlur={() => handleDescriptionUpdate(primaryTask.id, editingDesc)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleDescriptionUpdate(primaryTask.id, editingDesc);
+                          if (e.key === 'Escape') setEditingTaskId(null);
+                        }}
+                      />
+                    ) : (
+                      <span
+                        className={`truncate ${allCompleted ? 'line-through text-muted-foreground/60' : ''}`}
+                        title={primaryTask.description}
+                        onDoubleClick={() => {
+                          setEditingTaskId(primaryTask.id);
+                          setEditingDesc(primaryTask.description);
+                        }}
+                      >
+                        {primaryTask.description}
+                      </span>
+                    )}
                   </div>
                   {userNames.length > 0 && (
                     <div className="flex flex-wrap gap-0.5 ml-3">
@@ -343,23 +435,76 @@ const TaskGantt: React.FC<Props> = ({ tasks, projectId, projectName, users, onTo
                     }
                   }}
                 >
+                  {/* Day grid lines */}
                   <div className="absolute inset-0 flex pointer-events-none">
                     {allDays.map((_, i) => (
                       <div key={i} className="border-r border-muted/30" style={{ width: `${(1 / totalDays) * 100}%` }} />
                     ))}
                   </div>
 
+                  {/* Deadline vertical lines in task rows */}
+                  {deadlinePositions.map((dl, idx) => {
+                    const leftPct = ((dl.col + 0.5) / totalDays) * 100;
+                    return (
+                      <Tooltip key={`dlr-${idx}`}>
+                        <TooltipTrigger asChild>
+                          <div
+                            className="absolute top-0 bottom-0 z-5 pointer-events-auto cursor-help"
+                            style={{ left: `${leftPct}%`, width: '2px', transform: 'translateX(-1px)' }}
+                          >
+                            <div className="w-0.5 h-full" style={{ backgroundColor: 'hsl(0 80% 55% / 0.4)' }} />
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[200px]">
+                          <div className="text-xs">
+                            <span className="font-medium">{dl.name}</span>
+                            <span className="text-muted-foreground ml-1">({getCategoryMeta(dl.category).label})</span>
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
+                    );
+                  })}
+
+                  {/* Task bar - solid color with white text */}
                   {hasDates && (
                     <div
-                      className="absolute top-1 bottom-1 rounded-md flex items-center justify-center text-[9px] text-white font-medium px-1 truncate"
+                      className="absolute top-1 bottom-1 rounded-md flex items-center justify-center text-[9px] text-white font-medium px-1 truncate group/bar"
                       style={{
                         left: `${(blockStart / totalDays) * 100}%`,
                         width: `${((blockEnd - blockStart + 1) / totalDays) * 100}%`,
                         backgroundColor: color,
                         opacity: allCompleted ? 0.5 : 1,
                       }}
+                      onDoubleClick={() => {
+                        setEditingTaskId(primaryTask.id);
+                        setEditingDesc(primaryTask.description);
+                      }}
                     >
+                      {/* Left resize handle */}
+                      <button
+                        className="absolute left-0 top-0 bottom-0 w-3 flex items-center justify-center opacity-0 group-hover/bar:opacity-100 cursor-ew-resize z-20 hover:bg-white/20 rounded-l-md transition-opacity"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleBarResize(primaryTask.id, primaryTask.start_date, primaryTask.end_date, 'start');
+                        }}
+                        title="Extend start date"
+                      >
+                        <ChevronLeft className="w-3 h-3 text-white" />
+                      </button>
+
                       <span className="truncate">{primaryTask.description}</span>
+
+                      {/* Right resize handle */}
+                      <button
+                        className="absolute right-0 top-0 bottom-0 w-3 flex items-center justify-center opacity-0 group-hover/bar:opacity-100 cursor-ew-resize z-20 hover:bg-white/20 rounded-r-md transition-opacity"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleBarResize(primaryTask.id, primaryTask.start_date, primaryTask.end_date, 'end');
+                        }}
+                        title="Extend end date"
+                      >
+                        <ChevronRight className="w-3 h-3 text-white" />
+                      </button>
                     </div>
                   )}
 
@@ -403,7 +548,7 @@ const TaskGantt: React.FC<Props> = ({ tasks, projectId, projectName, users, onTo
         </div>
       </div>
 
-      {/* Add Task Dialog - supports multiple person selection */}
+      {/* Add Task Dialog */}
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -471,6 +616,7 @@ const TaskGantt: React.FC<Props> = ({ tasks, projectId, projectName, users, onTo
         </AlertDialogContent>
       </AlertDialog>
     </div>
+    </TooltipProvider>
   );
 };
 

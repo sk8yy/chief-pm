@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { format } from 'date-fns';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
-import { X } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 
 export interface BlockData {
   projectId: string;
@@ -19,6 +19,7 @@ interface HourBlockProps {
   isNew?: boolean;
   onDistributionChange: (distribution: Record<string, number>) => void;
   onDelete?: () => void;
+  onResize?: (direction: 'start' | 'end') => void;
 }
 
 /** Distribute `total` integer hours as evenly as possible across `count` days */
@@ -37,6 +38,7 @@ const HourBlock = ({
   isNew,
   onDistributionChange,
   onDelete,
+  onResize,
 }: HourBlockProps) => {
   const total = Object.values(block.distribution).reduce((s, v) => s + v, 0);
   const [showPopover, setShowPopover] = useState(false);
@@ -74,7 +76,6 @@ const HourBlock = ({
 
   const handleDiscard = useCallback(() => {
     setShowPopover(false);
-    // Don't save — just close
   }, []);
 
   const handleDelete = useCallback(() => {
@@ -82,7 +83,6 @@ const HourBlock = ({
     if (onDelete) {
       onDelete();
     } else {
-      // Clear all hours to 0
       const zeroDist: Record<string, number> = {};
       block.dates.forEach((d) => { zeroDist[d] = 0; });
       onDistributionChange(zeroDist);
@@ -105,12 +105,8 @@ const HourBlock = ({
       }}
     >
       <Popover open={showPopover} onOpenChange={(open) => {
-        if (!open) {
-          // Closing without buttons = discard
-          setShowPopover(false);
-        } else {
-          setShowPopover(true);
-        }
+        // Only allow closing via onOpenChange; opening is via double-click
+        if (!open) setShowPopover(false);
       }}>
         <PopoverTrigger asChild>
           <div
@@ -120,7 +116,7 @@ const HourBlock = ({
               border: `2px solid ${borderColor}`,
               color: borderColor,
             }}
-            onClick={(e) => {
+            onDoubleClick={(e) => {
               if (inlineEditing) {
                 e.stopPropagation();
                 return;
@@ -141,6 +137,34 @@ const HourBlock = ({
               </button>
             )}
 
+            {/* Left resize handle */}
+            {onResize && !inlineEditing && (
+              <button
+                className="absolute left-0 top-0 bottom-0 w-4 flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-ew-resize z-20 hover:bg-black/10 rounded-l-md transition-opacity"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onResize('start');
+                }}
+                title="Extend left"
+              >
+                <ChevronLeft className="w-3 h-3" />
+              </button>
+            )}
+
+            {/* Right resize handle */}
+            {onResize && !inlineEditing && (
+              <button
+                className="absolute right-0 top-0 bottom-0 w-4 flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-ew-resize z-20 hover:bg-black/10 rounded-r-md transition-opacity"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onResize('end');
+                }}
+                title="Extend right"
+              >
+                <ChevronRight className="w-3 h-3" />
+              </button>
+            )}
+
             {inlineEditing ? (
               <input
                 ref={inlineRef}
@@ -150,7 +174,6 @@ const HourBlock = ({
                 value={inlineDraft}
                 onClick={(e) => e.stopPropagation()}
                 onChange={(e) => {
-                  // Integer only
                   const val = e.target.value.replace(/[^0-9]/g, '');
                   setInlineDraft(val);
                 }}

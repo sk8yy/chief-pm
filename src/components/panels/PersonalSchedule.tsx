@@ -97,10 +97,21 @@ const PersonalSchedule = () => {
 
   // Map deadlines by date string for quick lookup
   const deadlinesByDate = useMemo(() => {
-    const map: Record<string, Array<{ name: string; projectName: string; category: string }>> = {};
+    const map: Record<string, Array<{ name: string; projectName: string; category: string; projectId: string | null }>> = {};
     allDeadlines?.forEach((d: any) => {
       if (!map[d.date]) map[d.date] = [];
-      map[d.date].push({ name: d.name, projectName: d.projects?.name ?? 'Unknown', category: (d as any).category ?? 'due' });
+      map[d.date].push({ name: d.name, projectName: d.projects?.name ?? 'Unknown', category: (d as any).category ?? 'due', projectId: d.project_id });
+    });
+    return map;
+  }, [allDeadlines]);
+
+  // Map deadlines by project+date for cell-level indicators
+  const deadlinesByProjectDate = useMemo(() => {
+    const map: Record<string, Array<{ name: string; category: string }>> = {};
+    allDeadlines?.forEach((d: any) => {
+      const key = `${d.project_id}_${d.date}`;
+      if (!map[key]) map[key] = [];
+      map[key].push({ name: d.name, category: (d as any).category ?? 'due' });
     });
     return map;
   }, [allDeadlines]);
@@ -391,39 +402,15 @@ const PersonalSchedule = () => {
                   <Plus className="h-3 w-3" />
                 </Button>
               </div>
-              {days.map((day) => {
-                const dateStr = format(day, 'yyyy-MM-dd');
-                const dayDeadlines = deadlinesByDate[dateStr];
-                return (
-                  <div
-                    key={day.toISOString()}
-                    className={`px-1 py-1.5 text-center border-r relative ${!isSameMonth(day, currentMonth) ? 'text-muted-foreground/50' : ''}`}
-                  >
-                    <div>{DAYS[day.getDay() === 0 ? 6 : day.getDay() - 1]}</div>
-                    <div className="flex items-center justify-center gap-0.5">
-                      {format(day, 'd')}
-                      {dayDeadlines && dayDeadlines.length > 0 && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="w-2 h-2 rounded-sm bg-destructive inline-block shrink-0 cursor-help" />
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-[200px]">
-                            {dayDeadlines.map((dl, i) => {
-                              const cat = getCategoryMeta(dl.category);
-                              return (
-                                <div key={i} className="text-xs">
-                                  <span className="font-medium">{dl.name}</span>
-                                  <span className="text-muted-foreground ml-1">({cat.label} · {dl.projectName})</span>
-                                </div>
-                              );
-                            })}
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+              {days.map((day, dayIdx) => (
+                <div
+                  key={day.toISOString()}
+                  className={`px-1 py-1.5 text-center border-r ${!isSameMonth(day, currentMonth) ? 'text-muted-foreground/50' : ''}`}
+                >
+                  <div>{DAYS[dayIdx]}</div>
+                  <div>{format(day, 'd')}</div>
+                </div>
+              ))}
               <div className="px-1 py-1.5 text-center">Weekly Total</div>
             </div>
 
@@ -520,6 +507,23 @@ const PersonalSchedule = () => {
                             endCol={endCol}
                             onDistributionChange={(dist) => handleBlockDistribution(project.id, dist)}
                             onDelete={() => handleBlockDelete(project.id, block.dates)}
+                            onResize={(direction) => {
+                              if (direction === 'start') {
+                                const firstDate = block.dates[0];
+                                const firstIdx = days.findIndex(d => format(d, 'yyyy-MM-dd') === firstDate);
+                                if (firstIdx > 0) {
+                                  const prevDate = format(days[firstIdx - 1], 'yyyy-MM-dd');
+                                  handleHourChange(project.id, prevDate, 1);
+                                }
+                              } else {
+                                const lastDate = block.dates[block.dates.length - 1];
+                                const lastIdx = days.findIndex(d => format(d, 'yyyy-MM-dd') === lastDate);
+                                if (lastIdx < 6) {
+                                  const nextDate = format(days[lastIdx + 1], 'yyyy-MM-dd');
+                                  handleHourChange(project.id, nextDate, 1);
+                                }
+                              }
+                            }}
                           />
                         );
                       })}
@@ -574,6 +578,40 @@ const PersonalSchedule = () => {
                           );
                         })()
                       )}
+
+                      {/* Deadline red dots in project day cells */}
+                      {days.map((day, dayIdx) => {
+                        const dateStr = format(day, 'yyyy-MM-dd');
+                        const dls = deadlinesByProjectDate[`${project.id}_${dateStr}`];
+                        if (!dls || dls.length === 0) return null;
+                        return (
+                          <Tooltip key={`dl-${dayIdx}`}>
+                            <TooltipTrigger asChild>
+                              <div
+                                className="absolute z-20 cursor-help"
+                                style={{
+                                  left: `${((dayIdx + 0.5) / 7) * 100}%`,
+                                  transform: 'translateX(-50%)',
+                                  top: '2px',
+                                }}
+                              >
+                                <div className="w-2 h-2 rounded-sm bg-destructive" />
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-[200px]">
+                              {dls.map((dl, i) => {
+                                const cat = getCategoryMeta(dl.category);
+                                return (
+                                  <div key={i} className="text-xs">
+                                    <span className="font-medium">{dl.name}</span>
+                                    <span className="text-muted-foreground ml-1">({cat.label})</span>
+                                  </div>
+                                );
+                              })}
+                            </TooltipContent>
+                          </Tooltip>
+                        );
+                      })}
                     </div>
 
                     <div className="px-1 py-1 text-center font-medium border-l tabular-nums">

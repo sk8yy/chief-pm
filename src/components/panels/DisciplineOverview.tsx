@@ -370,6 +370,7 @@ const DisciplineOverview = () => {
                                 <div
                                   key={ws.toISOString()}
                                   className="px-1 py-1 border-r min-h-[52px] relative group flex flex-col items-center justify-center gap-1"
+                                  data-week-cell
                                   onMouseEnter={() => setHoveredCell(cellKey)}
                                   onMouseLeave={() => setHoveredCell(null)}
                                 >
@@ -397,7 +398,8 @@ const DisciplineOverview = () => {
                                         className="flex items-center gap-0.5 text-[9px] text-muted-foreground hover:text-foreground bg-muted/60 hover:bg-muted rounded px-1.5 py-0.5 transition-colors"
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          setAddDialogTarget({ projectId: project.id, weekStart: ws, anchorEl: e.currentTarget as HTMLElement });
+                                          const cell = (e.currentTarget as HTMLElement).closest('[data-week-cell]') as HTMLElement;
+                                          setAddDialogTarget({ projectId: project.id, weekStart: ws, anchorEl: cell });
                                         }}
                                       >
                                         <Plus className="h-2.5 w-2.5" /> Add

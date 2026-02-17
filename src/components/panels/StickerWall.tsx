@@ -20,7 +20,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, Trash2, ArrowLeft, ZoomIn, Sparkles, Loader2 } from 'lucide-react';
+import { Plus, Trash2, ArrowLeft, ZoomIn, Sparkles, Loader2, HelpCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 /* ───────── types ───────── */
@@ -82,6 +82,7 @@ const StickerWall: React.FC = () => {
   const [isMatching, setIsMatching] = useState(false);
   const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
   const [matchStickerId, setMatchStickerId] = useState<string | null>(null);
+  const [noMatchStickerId, setNoMatchStickerId] = useState<string | null>(null);
 
   /* ───── handlers ───── */
   const requestAIMatch = async (stickerId: string, content: string) => {
@@ -111,6 +112,9 @@ const StickerWall: React.FC = () => {
       if (data.matched_project_id && data.confidence !== 'low') {
         setMatchResult(data);
         setMatchStickerId(stickerId);
+      } else {
+        // No match found — prompt user to create a new project
+        setNoMatchStickerId(stickerId);
       }
     } catch (e) {
       console.error('AI match error:', e);
@@ -355,12 +359,41 @@ const StickerWall: React.FC = () => {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* no-match prompt dialog */}
+      <Dialog open={!!noMatchStickerId && !showCreateProject} onOpenChange={(open) => { if (!open) setNoMatchStickerId(null); }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <HelpCircle className="h-5 w-5 text-muted-foreground" /> No Match Found
+            </DialogTitle>
+            <DialogDescription>
+              Couldn't find a matching project. Would you like to create a new one?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setNoMatchStickerId(null)}>Skip</Button>
+            <Button onClick={() => setShowCreateProject(true)}>
+              <Plus className="h-3.5 w-3.5 mr-1" /> Create Project
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* create project dialog */}
       <CreateProjectDialog
         open={showCreateProject}
         onClose={() => setShowCreateProject(false)}
         disciplines={disciplines ?? []}
         users={users ?? []}
+        onCreated={async (projectId) => {
+          // Auto-link the sticker if we came from a no-match prompt
+          const stickerToLink = noMatchStickerId;
+          if (stickerToLink) {
+            await updateSticker.mutateAsync({ id: stickerToLink, project_id: projectId });
+            toast.success('Sticker linked to new project!');
+            setNoMatchStickerId(null);
+          }
+        }}
       />
     </div>
   );

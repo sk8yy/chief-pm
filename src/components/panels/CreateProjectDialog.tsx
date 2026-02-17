@@ -28,9 +28,11 @@ interface CreateProjectDialogProps {
   users: User[];
   /** Pre-select a discipline when creating from a discipline group */
   defaultDisciplineId?: string | null;
+  /** Called with the new project id after successful creation */
+  onCreated?: (projectId: string) => void;
 }
 
-const CreateProjectDialog = ({ open, onClose, disciplines, users, defaultDisciplineId }: CreateProjectDialogProps) => {
+const CreateProjectDialog = ({ open, onClose, disciplines, users, defaultDisciplineId, onCreated }: CreateProjectDialogProps) => {
   const [name, setName] = useState('');
   const [jobNumber, setJobNumber] = useState('');
   const [disciplineId, setDisciplineId] = useState<string>(defaultDisciplineId ?? '');
@@ -104,6 +106,7 @@ const CreateProjectDialog = ({ open, onClose, disciplines, users, defaultDiscipl
     }
 
     qc.invalidateQueries({ queryKey: ['projects'] });
+    onCreated?.(data.id);
     onClose();
   };
 

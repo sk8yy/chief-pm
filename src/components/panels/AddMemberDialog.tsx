@@ -38,12 +38,13 @@ const AddMemberDialog = ({ open, onClose, onConfirm, availableUsers, disciplines
   useEffect(() => {
     updatePos();
     if (!open || !anchorEl) return;
-    window.addEventListener('scroll', updatePos, true);
-    window.addEventListener('resize', updatePos);
-    return () => {
-      window.removeEventListener('scroll', updatePos, true);
-      window.removeEventListener('resize', updatePos);
+    let raf: number;
+    const tick = () => {
+      updatePos();
+      raf = requestAnimationFrame(tick);
     };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
   }, [updatePos]);
 
   // Close on outside click

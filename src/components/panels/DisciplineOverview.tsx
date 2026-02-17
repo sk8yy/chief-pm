@@ -16,6 +16,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import MemberSticker from './MemberSticker';
 import AddMemberDialog from './AddMemberDialog';
+import CreateProjectDialog from './CreateProjectDialog';
 
 const DisciplineOverview = () => {
   const { mode } = useAppContext();
@@ -24,10 +25,9 @@ const DisciplineOverview = () => {
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = useState<Record<string, 'projects' | 'people'>>({});
 
-  // Add project form state
-  const [addingProjectTo, setAddingProjectTo] = useState<string | null>(null);
-  const [newProjectName, setNewProjectName] = useState('');
-  const [newProjectJobNumber, setNewProjectJobNumber] = useState('');
+  // Create project dialog state
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [createDialogDisciplineId, setCreateDialogDisciplineId] = useState<string | null>(null);
 
   // Add person form state
   const [addingPersonTo, setAddingPersonTo] = useState<string | null>(null);
@@ -138,18 +138,9 @@ const DisciplineOverview = () => {
     return discProjects.reduce((sum, p) => sum + getProjectMonthTotal(p.id), 0);
   };
 
-  // CRUD operations
-  const addProject = async (disciplineId: string) => {
-    if (!newProjectName.trim()) return;
-    await supabase.from('projects').insert({
-      name: newProjectName.trim(),
-      job_number: newProjectJobNumber.trim() || 'xxxxxx-xx',
-      discipline_id: disciplineId,
-    });
-    setNewProjectName('');
-    setNewProjectJobNumber('');
-    setAddingProjectTo(null);
-    queryClient.invalidateQueries({ queryKey: ['projects'] });
+  const openCreateDialog = (disciplineId: string) => {
+    setCreateDialogDisciplineId(disciplineId);
+    setCreateDialogOpen(true);
   };
 
   const deleteProject = async (projectId: string) => {
@@ -530,39 +521,13 @@ const DisciplineOverview = () => {
                       <div />
                     </div>
 
-                    {/* Add project button/form */}
-                    {addingProjectTo === group.discipline.id ? (
-                      <div className="px-3 py-2 border-t flex items-center gap-2">
-                        <Input
-                          placeholder="Project name"
-                          value={newProjectName}
-                          onChange={(e) => setNewProjectName(e.target.value)}
-                          className="h-7 text-xs flex-1"
-                          autoFocus
-                          onKeyDown={(e) => e.key === 'Enter' && addProject(group.discipline.id)}
-                        />
-                        <Input
-                          placeholder="Job #"
-                          value={newProjectJobNumber}
-                          onChange={(e) => setNewProjectJobNumber(e.target.value)}
-                          className="h-7 text-xs w-28"
-                          onKeyDown={(e) => e.key === 'Enter' && addProject(group.discipline.id)}
-                        />
-                        <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => addProject(group.discipline.id)}>
-                          <Check className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => setAddingProjectTo(null)}>
-                          <X className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <button
-                        className="w-full px-3 py-2 border-t text-xs text-muted-foreground hover:text-foreground hover:bg-muted/20 flex items-center gap-1.5 transition-colors"
-                        onClick={() => setAddingProjectTo(group.discipline.id)}
-                      >
-                        <Plus className="h-3.5 w-3.5" /> Add project
-                      </button>
-                    )}
+                    {/* Add project button */}
+                    <button
+                      className="w-full px-3 py-2 border-t text-xs text-muted-foreground hover:text-foreground hover:bg-muted/20 flex items-center gap-1.5 transition-colors"
+                      onClick={() => openCreateDialog(group.discipline.id)}
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Add project
+                    </button>
                   </div>
                 )}
 
@@ -671,6 +636,15 @@ const DisciplineOverview = () => {
           </button>
         </div>
       )}
+
+      {/* Create Project Dialog */}
+      <CreateProjectDialog
+        open={createDialogOpen}
+        onClose={() => setCreateDialogOpen(false)}
+        disciplines={disciplines ?? []}
+        users={users ?? []}
+        defaultDisciplineId={createDialogDisciplineId}
+      />
     </div>
   );
 };

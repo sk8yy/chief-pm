@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ChevronLeft, ChevronRight, Plus, X, Calendar, Info, Clock } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import CreateProjectDialog from './CreateProjectDialog';
 
 const ProjectManagement = () => {
   const { mode } = useAppContext();
@@ -23,6 +24,7 @@ const ProjectManagement = () => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [newDeadlineName, setNewDeadlineName] = useState('');
   const [newDeadlineDate, setNewDeadlineDate] = useState('');
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
   const { data: projects } = useProjects();
   const { data: disciplines } = useDisciplines();
@@ -232,6 +234,10 @@ const ProjectManagement = () => {
             ))}
           </SelectContent>
         </Select>
+
+        <Button variant="outline" size="sm" onClick={() => setCreateDialogOpen(true)}>
+          <Plus className="h-3.5 w-3.5 mr-1" /> New Project
+        </Button>
 
         <div className="flex items-center gap-2 ml-auto">
           <Button variant="outline" size="icon" onClick={() => setCurrentMonth((m) => subMonths(m, 1))}>
@@ -500,6 +506,14 @@ const ProjectManagement = () => {
           </section>
         </>
       )}
+
+      {/* Create Project Dialog */}
+      <CreateProjectDialog
+        open={createDialogOpen}
+        onClose={() => setCreateDialogOpen(false)}
+        disciplines={disciplines ?? []}
+        users={users ?? []}
+      />
     </div>
   );
 };

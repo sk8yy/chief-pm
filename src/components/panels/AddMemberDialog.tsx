@@ -51,7 +51,11 @@ const AddMemberDialog = ({ open, onClose, onConfirm, availableUsers, disciplines
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (dialogRef.current && !dialogRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (dialogRef.current && !dialogRef.current.contains(target)) {
+        // Don't close if clicking inside a Radix portal (e.g. Select dropdown)
+        const radixPortal = (target as Element).closest?.('[data-radix-popper-content-wrapper], [role="listbox"], [role="option"]');
+        if (radixPortal) return;
         handleDiscard();
       }
     };

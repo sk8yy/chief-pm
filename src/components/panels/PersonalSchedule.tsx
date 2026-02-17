@@ -270,9 +270,6 @@ const PersonalSchedule = () => {
           <Button variant="outline" size="sm" onClick={() => setShowAddDeadline(!showAddDeadline)}>
             <Target className="h-3.5 w-3.5 mr-1" /> Add Deadline
           </Button>
-          <Button variant="outline" size="sm" onClick={() => setShowAddProject(true)}>
-            <Plus className="h-3.5 w-3.5 mr-1" /> Add Project
-          </Button>
         </div>
       </div>
 
@@ -332,11 +329,8 @@ const PersonalSchedule = () => {
         const weekStartStr = format(weekStart, 'yyyy-MM-dd');
         const weekAssigned = weekAssignmentMap[weekStartStr] ?? new Set();
 
-        // Filter grouped projects to only those assigned this week
-        const weekGroupedProjects = groupedProjects.map(g => ({
-          ...g,
-          projects: g.projects.filter(p => weekAssigned.has(p.id)),
-        })).filter(g => g.projects.length > 0);
+        // Show all assigned projects in every week (not just per-week filtering)
+        const weekGroupedProjects = groupedProjects;
 
         // Resolve newBlock dates if this is the target week
         let resolvedNewBlock: { projectId: string; dates: string[] } | null = null;
@@ -370,8 +364,11 @@ const PersonalSchedule = () => {
           <div key={weekKey} className="border rounded-lg overflow-hidden bg-card">
             {/* Header row */}
             <div className="grid grid-cols-[180px_repeat(7,1fr)_80px] text-xs font-medium border-b bg-muted/50">
-              <div className="px-2 py-1.5 border-r">
-                Week of {format(weekStart, 'MMM d')}
+              <div className="px-2 py-1.5 border-r flex items-center justify-between">
+                <span>Week of {format(weekStart, 'MMM d')}</span>
+                <Button variant="ghost" size="sm" className="h-5 px-1.5 text-[10px]" onClick={() => setShowAddProject(true)}>
+                  <Plus className="h-3 w-3" />
+                </Button>
               </div>
               {days.map((day) => {
                 const dateStr = format(day, 'yyyy-MM-dd');

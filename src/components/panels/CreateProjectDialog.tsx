@@ -117,7 +117,7 @@ const CreateProjectDialog = ({ open, onClose, disciplines, users, defaultDiscipl
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-      <div ref={dialogRef} className="bg-card border rounded-lg shadow-lg w-[440px] max-h-[600px] flex flex-col">
+      <div ref={dialogRef} className="bg-card border rounded-lg shadow-lg w-[440px] max-h-[85vh] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="px-4 py-3 border-b flex items-center justify-between">
           <span className="text-sm font-semibold">Create New Project</span>

@@ -4,6 +4,8 @@ import { useStickers, useCreateSticker, useUpdateSticker, useDeleteSticker } fro
 import { useUsers } from '@/hooks/useUsers';
 import { useProjects } from '@/hooks/useProjects';
 import { getDisciplineColor } from '@/lib/colors';
+import { useDisciplines } from '@/hooks/useDisciplines';
+import CreateProjectDialog from '@/components/panels/CreateProjectDialog';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
@@ -53,6 +55,7 @@ const StickerWall: React.FC = () => {
   const { data: stickers } = useStickers(filters);
   const { data: users } = useUsers();
   const { data: projects } = useProjects();
+  const { data: disciplines } = useDisciplines();
   const createSticker = useCreateSticker();
   const updateSticker = useUpdateSticker();
   const deleteSticker = useDeleteSticker();
@@ -71,6 +74,9 @@ const StickerWall: React.FC = () => {
 
   /* deleting */
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  /* create project dialog */
+  const [showCreateProject, setShowCreateProject] = useState(false);
 
   /* AI match */
   const [isMatching, setIsMatching] = useState(false);
@@ -305,7 +311,13 @@ const StickerWall: React.FC = () => {
           <Textarea autoFocus value={editContent} onChange={(e) => setEditContent(e.target.value)} className="min-h-[160px] bg-white/20 border-current/20" />
           <div className="space-y-1">
             <label className="text-xs font-medium opacity-70">Project</label>
-            <Select value={editProjectId ?? '__none__'} onValueChange={(v) => setEditProjectId(v === '__none__' ? null : v)}>
+            <Select
+              value={editProjectId ?? '__none__'}
+              onValueChange={(v) => {
+                if (v === '__new__') { setShowCreateProject(true); return; }
+                setEditProjectId(v === '__none__' ? null : v);
+              }}
+            >
               <SelectTrigger className="bg-background">
                 <SelectValue placeholder="No project" />
               </SelectTrigger>
@@ -314,6 +326,9 @@ const StickerWall: React.FC = () => {
                 {projects?.map((p) => (
                   <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                 ))}
+                <SelectItem value="__new__" className="text-primary font-medium">
+                  <span className="flex items-center gap-1"><Plus className="h-3 w-3" /> New Project</span>
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -339,6 +354,14 @@ const StickerWall: React.FC = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* create project dialog */}
+      <CreateProjectDialog
+        open={showCreateProject}
+        onClose={() => setShowCreateProject(false)}
+        disciplines={disciplines ?? []}
+        users={users ?? []}
+      />
     </div>
   );
 };

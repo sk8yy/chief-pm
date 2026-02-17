@@ -33,7 +33,7 @@ serve(async (req) => {
       .join("\n");
 
     const stickerTexts = stickers
-      .map((s: any, i: number) => `[Sticker ${i + 1}] (project: ${s.project_name || "none"})\n${s.content}`)
+      .map((s: any, i: number) => `[Sticker ${i + 1}] (project: ${s.project_name || "none"}, created: ${s.created_at || "unknown"})\n${s.content}`)
       .join("\n---\n");
 
     const systemPrompt = `You are a project management assistant. Analyze sticker notes and extract actionable items.
@@ -53,7 +53,12 @@ Rules:
 - If no project match, set project_id to null.
 - If no user match, set user_id to null but keep the person's name in assigned_person_name.
 - Each extracted item should reference which sticker it came from.
-- Be conservative: only extract clear, actionable items. Don't invent data.`;
+- Be conservative: only extract clear, actionable items. Don't invent data.
+- For tasks: extract start_date and end_date when possible.
+  - If the sticker mentions a submission date, due date, or deadline for a task, use it as end_date.
+  - If the sticker mentions a start date, use it as start_date.
+  - If no start date is mentioned, leave start_date as null (the system will default to sticker creation date).
+  - If no end/due date is mentioned, leave end_date as null.`;
 
     const userPrompt = `Analyze these stickers and extract deadlines, tasks, and assigned persons:\n\n${stickerTexts}`;
 
@@ -104,6 +109,8 @@ Rules:
                         user_id: { type: "string", description: "Matched user ID or null" },
                         assigned_person_name: { type: "string", description: "Person name for display" },
                         source_sticker_index: { type: "number", description: "1-based sticker index" },
+                        start_date: { type: "string", description: "YYYY-MM-DD start date or null" },
+                        end_date: { type: "string", description: "YYYY-MM-DD end/due date or null" },
                       },
                       required: ["description", "source_sticker_index"],
                       additionalProperties: false,

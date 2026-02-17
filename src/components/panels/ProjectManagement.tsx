@@ -474,6 +474,7 @@ const ProjectManagement = () => {
             <TaskGantt
               tasks={projectTasks ?? []}
               projectId={selectedProjectId}
+              projectName={selectedProject?.name ?? ''}
               users={users ?? []}
               onToggle={(id, is_completed) => toggleTask.mutate({ id, is_completed })}
             />

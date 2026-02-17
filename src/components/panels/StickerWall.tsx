@@ -65,7 +65,6 @@ const StickerWall: React.FC = () => {
   const updateSticker = useUpdateSticker();
   const deleteSticker = useDeleteSticker();
 
-  // Build set of completed task descriptions for strikethrough on stickers
   const completedTaskDescriptions = useMemo(() => {
     const set = new Set<string>();
     allTasks?.forEach(t => {
@@ -131,6 +130,7 @@ const StickerWall: React.FC = () => {
           index: i + 1,
           content: s.content,
           project_name: s.projects?.name || null,
+          created_at: s.created_at,
         }));
 
       const resp = await fetch(
@@ -156,8 +156,42 @@ const StickerWall: React.FC = () => {
       }
 
       const data = await resp.json();
+      const rawTasks: ExtractedTask[] = data.tasks || [];
+
+      // Apply default start_date from sticker created_at if not specified by AI
+      const tasksWithDefaults = rawTasks.map(t => {
+        const stickerIdx = t.source_sticker_index - 1;
+        const sticker = selectedStickers[stickerIdx];
+        const defaultStart = sticker?.created_at ? format(new Date(sticker.created_at), 'yyyy-MM-dd') : null;
+        return {
+          ...t,
+          start_date: t.start_date || defaultStart,
+          end_date: t.end_date || null,
+        };
+      });
+
+      // Dedup against existing tasks
+      const existingTasks = allTasks ?? [];
+      const markedTasks = tasksWithDefaults.map(t => {
+        const descKey = t.description.toLowerCase().trim();
+        const match = existingTasks.find(
+          et => et.description.toLowerCase().trim() === descKey &&
+                et.project_id === t.project_id
+        );
+        if (match) {
+          // Check if new info (dates) was absent before
+          const hasNewStart = t.start_date && !match.start_date;
+          const hasNewEnd = t.end_date && !match.end_date;
+          if (hasNewStart || hasNewEnd) {
+            return { ...t, status: 'updated' as const, _existingId: match.id };
+          }
+          return { ...t, status: 'already_added' as const };
+        }
+        return t;
+      });
+
       setExtractedDeadlines(data.deadlines || []);
-      setExtractedTasks(data.tasks || []);
+      setExtractedTasks(markedTasks);
       setShowExtraction(true);
     } catch (e) {
       console.error('AI analysis error:', e);
@@ -192,39 +226,53 @@ const StickerWall: React.FC = () => {
           }));
         if (rows.length) {
           const { error } = await supabase.from('deadlines').insert(rows as any);
-          if (error) {
-            console.error('Deadline insert error:', error);
-            throw error;
-          }
+          if (error) throw error;
         }
       }
 
-      // Insert tasks – deduplicate by description+project (multi-person tasks create one row per unique user)
-      if (tasks.length > 0) {
-        const seen = new Set<string>();
-        const rows = tasks
-          .filter(t => t.description && t.project_id)
-          .filter(t => {
-            const key = `${t.description.toLowerCase().trim()}_${t.project_id}_${t.user_id || effectiveUserId}`;
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-          })
-          .map(t => ({
+      // Handle tasks
+      const seen = new Set<string>();
+      let insertCount = 0;
+      let updateCount = 0;
+
+      for (const t of tasks) {
+        if (!t.description || !t.project_id) continue;
+        const key = `${t.description.toLowerCase().trim()}_${t.project_id}_${t.user_id || effectiveUserId}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        if (t.status === 'already_added') continue;
+
+        if (t.status === 'updated' && (t as any)._existingId) {
+          // Update existing task with new dates
+          const { error } = await supabase.from('tasks').update({
+            start_date: t.start_date || null,
+            end_date: t.end_date || null,
+          }).eq('id', (t as any)._existingId);
+          if (error) throw error;
+          updateCount++;
+        } else {
+          // Insert new task
+          const { error } = await supabase.from('tasks').insert({
             description: t.description,
             project_id: t.project_id!,
             user_id: t.user_id || effectiveUserId,
             week_start: weekStart,
             is_planned: true,
             is_completed: false,
-          }));
-        if (rows.length) {
-          const { error } = await supabase.from('tasks').insert(rows);
+            start_date: t.start_date || null,
+            end_date: t.end_date || null,
+          });
           if (error) throw error;
+          insertCount++;
         }
       }
 
-      toast.success(`Saved ${deadlines.length} deadline(s) and ${tasks.length} task(s).`);
+      const parts: string[] = [];
+      if (deadlines.length) parts.push(`${deadlines.length} deadline(s)`);
+      if (insertCount) parts.push(`${insertCount} new task(s)`);
+      if (updateCount) parts.push(`${updateCount} updated task(s)`);
+      toast.success(`Saved ${parts.join(' and ')}.`);
       setShowExtraction(false);
       exitSelectMode();
     } catch (e) {
@@ -333,7 +381,6 @@ const StickerWall: React.FC = () => {
         <h2 className="text-lg font-semibold">Sticker Wall</h2>
 
         <div className="flex items-center gap-4 flex-wrap">
-          {/* multi-select toggle */}
           {!selectMode ? (
             <Button variant="outline" size="sm" onClick={() => setSelectMode(true)} disabled={!stickers?.length}>
               <CheckSquare className="h-3.5 w-3.5 mr-1" /> Select
@@ -341,11 +388,7 @@ const StickerWall: React.FC = () => {
           ) : (
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground">{selectedIds.size} selected</span>
-              <Button
-                size="sm"
-                onClick={handleAnalyze}
-                disabled={selectedIds.size === 0 || isAnalyzing}
-              >
+              <Button size="sm" onClick={handleAnalyze} disabled={selectedIds.size === 0 || isAnalyzing}>
                 {isAnalyzing ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Brain className="h-3.5 w-3.5 mr-1" />}
                 Analyze
               </Button>
@@ -355,14 +398,12 @@ const StickerWall: React.FC = () => {
             </div>
           )}
 
-          {/* my / all toggle */}
           <div className="flex items-center gap-2 text-sm">
             <span className={!showAll ? 'font-semibold text-foreground' : 'text-muted-foreground'}>My</span>
             <Switch checked={showAll} onCheckedChange={setShowAll} />
             <span className={showAll ? 'font-semibold text-foreground' : 'text-muted-foreground'}>All</span>
           </div>
 
-          {/* zoom slider */}
           <div className="flex items-center gap-2 w-40">
             <ZoomIn className="h-4 w-4 text-muted-foreground" />
             <Slider min={1} max={8} step={1} value={[columns]} onValueChange={([v]) => setColumns(v)} />
@@ -371,7 +412,6 @@ const StickerWall: React.FC = () => {
         </div>
       </div>
 
-      {/* AI matching indicator */}
       {isMatching && (
         <div className="flex items-center gap-2 text-sm text-muted-foreground justify-center">
           <Loader2 className="h-4 w-4 animate-spin" />
@@ -379,17 +419,10 @@ const StickerWall: React.FC = () => {
         </div>
       )}
 
-      {/* creating state */}
       {isCreating ? (
         <div className="flex justify-center">
           <div className="border rounded-lg p-6 bg-card space-y-4 w-full max-w-md aspect-[3/4] flex flex-col">
-            <Textarea
-              autoFocus
-              placeholder="Type your note here..."
-              value={newContent}
-              onChange={(e) => setNewContent(e.target.value)}
-              className="flex-1 text-base resize-none"
-            />
+            <Textarea autoFocus placeholder="Type your note here..." value={newContent} onChange={(e) => setNewContent(e.target.value)} className="flex-1 text-base resize-none" />
             <div className="flex justify-end gap-2">
               <Button variant="ghost" onClick={() => { setIsCreating(false); setNewContent(''); }}>
                 <ArrowLeft className="h-3.5 w-3.5 mr-1" /> Cancel
@@ -408,7 +441,6 @@ const StickerWall: React.FC = () => {
         </div>
       )}
 
-      {/* tile grid */}
       {(stickers?.length ?? 0) > 0 && (
         <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
           {(stickers as Sticker[])?.map((s) => {
@@ -423,7 +455,6 @@ const StickerWall: React.FC = () => {
                 onClick={selectMode ? () => toggleSelect(s.id) : undefined}
                 onDoubleClick={!selectMode ? () => { setEditingSticker(s); setEditContent(s.content); setEditProjectId(s.project_id); } : undefined}
               >
-                {/* select checkbox overlay */}
                 {selectMode && (
                   <div className={`absolute top-1.5 left-1.5 w-5 h-5 rounded border-2 flex items-center justify-center z-10 ${
                     isSelected ? 'bg-primary border-primary' : 'border-white/60 bg-black/20'

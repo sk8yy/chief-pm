@@ -232,28 +232,29 @@ const StickerWall: React.FC = () => {
           {(stickers as Sticker[])?.map((s) => (
             <div
               key={s.id}
-              className="relative rounded-lg border p-3 cursor-pointer transition-shadow hover:shadow-md group overflow-hidden aspect-[3/4]"
+              className="relative rounded-lg border p-3 cursor-pointer transition-shadow hover:shadow-md group overflow-hidden aspect-[4/3] flex flex-col"
               style={stickerBg(s)}
               onDoubleClick={() => { setEditingSticker(s); setEditContent(s.content); }}
             >
               <button
-                className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-black/10"
+                className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-black/10 z-10"
                 onClick={(e) => { e.stopPropagation(); setDeletingId(s.id); }}
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
 
-              <p className="text-xs whitespace-pre-wrap line-clamp-6">{s.content}</p>
+              <p className="flex-1 text-sm whitespace-pre-wrap overflow-hidden leading-snug">{s.content}</p>
 
-              {s.projects && (
-                <span className="mt-2 inline-block text-[10px] font-medium opacity-70">{s.projects.name}</span>
-              )}
-
-              {showAll && (
-                <span className="block text-[9px] opacity-50 mt-1">
-                  {users?.find((u) => u.id === s.user_id)?.name ?? 'Unknown'}
-                </span>
-              )}
+              <div className="flex items-end justify-between gap-1 mt-1 shrink-0">
+                {s.projects && (
+                  <span className="text-[10px] font-medium opacity-70 truncate">{s.projects.name}</span>
+                )}
+                {showAll && (
+                  <span className="text-[9px] opacity-50 whitespace-nowrap">
+                    {users?.find((u) => u.id === s.user_id)?.name ?? 'Unknown'}
+                  </span>
+                )}
+              </div>
             </div>
           ))}
         </div>

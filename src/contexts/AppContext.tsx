@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
-export type PanelType = 'discipline' | 'personal' | 'project';
+export type PanelType = 'sticker' | 'discipline' | 'personal' | 'project';
 export type ModeType = 'plan' | 'record';
 
 interface AppContextType {
@@ -15,7 +15,7 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [activePanel, setActivePanel] = useState<PanelType>('personal');
+  const [activePanel, setActivePanel] = useState<PanelType>('sticker');
   const [mode, setMode] = useState<ModeType>('plan');
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 

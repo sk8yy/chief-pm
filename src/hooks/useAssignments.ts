@@ -1,18 +1,22 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAppContext } from '@/contexts/AppContext';
 
 /** Fetch assignments for a specific user across a date range of weeks */
 export function useUserAssignments(userId: string | null, dateRange: { start: string; end: string }) {
+  const { workspaceId } = useAppContext();
   return useQuery({
-    queryKey: ['assignments', 'user', userId, dateRange.start, dateRange.end],
+    queryKey: ['assignments', 'user', userId, dateRange.start, dateRange.end, workspaceId],
     queryFn: async () => {
       if (!userId) return [];
-      const { data, error } = await supabase
+      let q = supabase
         .from('assignments')
         .select('*')
         .eq('user_id', userId)
         .gte('week_start', dateRange.start)
         .lte('week_start', dateRange.end);
+      if (workspaceId) q = q.eq('workspace_id', workspaceId);
+      const { data, error } = await q;
       if (error) throw error;
       return data;
     },
@@ -22,16 +26,19 @@ export function useUserAssignments(userId: string | null, dateRange: { start: st
 
 /** Fetch all assignments for a project across a date range */
 export function useProjectAssignments(projectId: string | undefined, dateRange: { start: string; end: string }) {
+  const { workspaceId } = useAppContext();
   return useQuery({
-    queryKey: ['assignments', 'project', projectId, dateRange.start, dateRange.end],
+    queryKey: ['assignments', 'project', projectId, dateRange.start, dateRange.end, workspaceId],
     queryFn: async () => {
       if (!projectId) return [];
-      const { data, error } = await supabase
+      let q = supabase
         .from('assignments')
         .select('*')
         .eq('project_id', projectId)
         .gte('week_start', dateRange.start)
         .lte('week_start', dateRange.end);
+      if (workspaceId) q = q.eq('workspace_id', workspaceId);
+      const { data, error } = await q;
       if (error) throw error;
       return data;
     },
@@ -41,14 +48,17 @@ export function useProjectAssignments(projectId: string | undefined, dateRange: 
 
 /** Fetch all assignments across all users/projects for a date range */
 export function useAllAssignments(dateRange: { start: string; end: string }) {
+  const { workspaceId } = useAppContext();
   return useQuery({
-    queryKey: ['assignments', 'all', dateRange.start, dateRange.end],
+    queryKey: ['assignments', 'all', dateRange.start, dateRange.end, workspaceId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let q = supabase
         .from('assignments')
         .select('*')
         .gte('week_start', dateRange.start)
         .lte('week_start', dateRange.end);
+      if (workspaceId) q = q.eq('workspace_id', workspaceId);
+      const { data, error } = await q;
       if (error) throw error;
       return data;
     },
@@ -58,14 +68,16 @@ export function useAllAssignments(dateRange: { start: string; end: string }) {
 /** Assign a user to a project for specific weeks */
 export function useAssignMember() {
   const qc = useQueryClient();
+  const { workspaceId } = useAppContext();
   return useMutation({
     mutationFn: async (params: { user_id: string; project_id: string; week_starts: string[] }) => {
       const rows = params.week_starts.map((ws) => ({
         user_id: params.user_id,
         project_id: params.project_id,
         week_start: ws,
+        workspace_id: workspaceId!,
       }));
-      const { error } = await supabase.from('assignments').upsert(rows, {
+      const { error } = await supabase.from('assignments').upsert(rows as any, {
         onConflict: 'user_id,project_id,week_start',
         ignoreDuplicates: true,
       });

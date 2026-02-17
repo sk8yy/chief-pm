@@ -1,11 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAppContext } from '@/contexts/AppContext';
 
 export function useProjects() {
+  const { workspaceId } = useAppContext();
   return useQuery({
-    queryKey: ['projects'],
+    queryKey: ['projects', workspaceId],
     queryFn: async () => {
-      const { data, error } = await supabase.from('projects').select('*, disciplines(*)').order('sort_order');
+      let q = supabase.from('projects').select('*, disciplines(*)').order('sort_order');
+      if (workspaceId) q = q.eq('workspace_id', workspaceId);
+      const { data, error } = await q;
       if (error) throw error;
       return data;
     },

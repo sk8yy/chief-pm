@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAppContext } from '@/contexts/AppContext';
 
 export interface TaskRow {
   id: string;
@@ -14,13 +15,15 @@ export interface TaskRow {
 }
 
 export function useTasks(filters?: { userId?: string; projectId?: string; weekStart?: string }) {
+  const { workspaceId } = useAppContext();
   return useQuery({
-    queryKey: ['tasks', filters],
+    queryKey: ['tasks', filters, workspaceId],
     queryFn: async () => {
       let q = supabase.from('tasks').select('*');
       if (filters?.userId) q = q.eq('user_id', filters.userId);
       if (filters?.projectId) q = q.eq('project_id', filters.projectId);
       if (filters?.weekStart) q = q.eq('week_start', filters.weekStart);
+      if (workspaceId) q = q.eq('workspace_id', workspaceId);
       const { data, error } = await q;
       if (error) throw error;
       return data as TaskRow[];
@@ -29,13 +32,15 @@ export function useTasks(filters?: { userId?: string; projectId?: string; weekSt
 }
 
 export function useAllTasks(dateRange?: { start: string; end: string }) {
+  const { workspaceId } = useAppContext();
   return useQuery({
-    queryKey: ['all_tasks', dateRange?.start, dateRange?.end],
+    queryKey: ['all_tasks', dateRange?.start, dateRange?.end, workspaceId],
     queryFn: async () => {
       let q = supabase.from('tasks').select('*');
       if (dateRange) {
         q = q.gte('week_start', dateRange.start).lte('week_start', dateRange.end);
       }
+      if (workspaceId) q = q.eq('workspace_id', workspaceId);
       const { data, error } = await q;
       if (error) throw error;
       return data as TaskRow[];
@@ -44,11 +49,14 @@ export function useAllTasks(dateRange?: { start: string; end: string }) {
 }
 
 export function useProjectTasks(projectId?: string) {
+  const { workspaceId } = useAppContext();
   return useQuery({
-    queryKey: ['project_tasks', projectId],
+    queryKey: ['project_tasks', projectId, workspaceId],
     enabled: !!projectId,
     queryFn: async () => {
-      const { data, error } = await supabase.from('tasks').select('*').eq('project_id', projectId!);
+      let q = supabase.from('tasks').select('*').eq('project_id', projectId!);
+      if (workspaceId) q = q.eq('workspace_id', workspaceId);
+      const { data, error } = await q;
       if (error) throw error;
       return data as TaskRow[];
     },
@@ -57,6 +65,7 @@ export function useProjectTasks(projectId?: string) {
 
 export function useUpsertTask() {
   const qc = useQueryClient();
+  const { workspaceId } = useAppContext();
   return useMutation({
     mutationFn: async (params: {
       id?: string;
@@ -88,7 +97,8 @@ export function useUpsertTask() {
           is_completed: params.is_completed ?? false,
           start_date: params.start_date ?? null,
           end_date: params.end_date ?? null,
-        });
+          workspace_id: workspaceId!,
+        } as any);
         if (error) throw error;
       }
     },
@@ -102,6 +112,7 @@ export function useUpsertTask() {
 
 export function useCreateTask() {
   const qc = useQueryClient();
+  const { workspaceId } = useAppContext();
   return useMutation({
     mutationFn: async (params: {
       user_id: string;
@@ -120,7 +131,8 @@ export function useCreateTask() {
         is_completed: false,
         start_date: params.start_date ?? null,
         end_date: params.end_date ?? null,
-      }).select().single();
+        workspace_id: workspaceId!,
+      } as any).select().single();
       if (error) throw error;
       return data as TaskRow;
     },

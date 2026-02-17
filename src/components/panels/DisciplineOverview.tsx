@@ -24,7 +24,7 @@ import CreateProjectDialog from './CreateProjectDialog';
 import TaskList from './TaskList';
 
 const DisciplineOverview = () => {
-  const { mode } = useAppContext();
+  const { mode, workspaceId } = useAppContext();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [expandedDisciplines, setExpandedDisciplines] = useState<Set<string>>(new Set());
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
@@ -184,7 +184,8 @@ const DisciplineOverview = () => {
     await supabase.from('app_users').insert({
       name: newPersonName.trim(),
       discipline_id: disciplineId,
-    });
+      workspace_id: workspaceId!,
+    } as any);
     setNewPersonName('');
     setAddingPersonTo(null);
     queryClient.invalidateQueries({ queryKey: ['app_users'] });
@@ -236,7 +237,8 @@ const DisciplineOverview = () => {
           date: row.date,
           planned_hours: field === 'planned_hours' ? (row[field] as number) : 0,
           recorded_hours: field === 'recorded_hours' ? (row[field] as number) : null,
-        });
+          workspace_id: workspaceId!,
+        } as any);
       }
     }
     // Also create assignment record

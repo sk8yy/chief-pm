@@ -10,6 +10,8 @@ interface AppContextType {
   setMode: (m: ModeType) => void;
   currentUserId: string | null;
   setCurrentUserId: (id: string | null) => void;
+  workspaceId: string | null;
+  setWorkspaceId: (id: string | null) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -18,6 +20,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activePanel, setActivePanel] = useState<PanelType>('sticker');
   const [mode, setMode] = useState<ModeType>('plan');
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
 
   useEffect(() => {
     if (mode === 'record') {
@@ -28,7 +31,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [mode]);
 
   return (
-    <AppContext.Provider value={{ activePanel, setActivePanel, mode, setMode, currentUserId, setCurrentUserId }}>
+    <AppContext.Provider value={{ activePanel, setActivePanel, mode, setMode, currentUserId, setCurrentUserId, workspaceId, setWorkspaceId }}>
       {children}
     </AppContext.Provider>
   );

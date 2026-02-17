@@ -51,7 +51,7 @@ type MatchResult = {
 
 /* ───────── component ───────── */
 const StickerWall: React.FC = () => {
-  const { currentUserId } = useAppContext();
+  const { currentUserId, workspaceId } = useAppContext();
 
   /* data */
   const [showAll, setShowAll] = useState(false);
@@ -255,6 +255,7 @@ const StickerWall: React.FC = () => {
             type: 'project' as const,
             visible_to: d.visible_to?.length ? d.visible_to : null,
             category: d.category ?? 'due',
+            workspace_id: workspaceId!,
           }));
         if (rows.length) {
           const { error } = await supabase.from('deadlines').insert(rows as any);
@@ -294,7 +295,8 @@ const StickerWall: React.FC = () => {
             is_completed: false,
             start_date: t.start_date || null,
             end_date: t.end_date || null,
-          });
+            workspace_id: workspaceId!,
+          } as any);
           if (error) throw error;
           insertCount++;
         }

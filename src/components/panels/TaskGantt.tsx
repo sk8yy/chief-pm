@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { format, startOfWeek, endOfWeek, addWeeks, addDays, eachDayOfInterval, eachWeekOfInterval, differenceInDays, isBefore, isAfter, parseISO } from 'date-fns';
 import { TaskRow, useCreateTask, useDeleteTask, useToggleTask, useUpdateTaskDates } from '@/hooks/useTasks';
+import { useAppContext } from '@/contexts/AppContext';
 import { getCategoryMeta } from '@/lib/deadlineCategories';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Button } from '@/components/ui/button';
@@ -51,6 +52,7 @@ interface Props {
 }
 
 const TaskGantt: React.FC<Props> = ({ tasks, projectId, projectName, users, onToggle, deadlines }) => {
+  const { workspaceId } = useAppContext();
   const createTask = useCreateTask();
   const deleteTask = useDeleteTask();
   const updateDates = useUpdateTaskDates();
@@ -168,7 +170,8 @@ const TaskGantt: React.FC<Props> = ({ tasks, projectId, projectName, users, onTo
         content: `${stickerTitle}\n- ${description}`,
         user_id: userId,
         project_id: projectId,
-      });
+        workspace_id: workspaceId!,
+      } as any);
     }
     queryClient.invalidateQueries({ queryKey: ['stickers'] });
   }, [projectId, projectName, users, queryClient]);

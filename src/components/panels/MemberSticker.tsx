@@ -16,9 +16,16 @@ const MemberSticker = ({ userName, hours, disciplineId, onDelete, onCopy, onEdit
   const [hovered, setHovered] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(String(hours));
+  const [optimisticHours, setOptimisticHours] = useState<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const { mode } = useAppContext();
   const colors = mode === 'record' ? getDisciplineColorRecord(disciplineId) : getDisciplineColor(disciplineId);
+  const displayHours = optimisticHours ?? hours;
+
+  // Reset optimistic value when prop catches up
+  useEffect(() => {
+    setOptimisticHours(null);
+  }, [hours]);
 
   useEffect(() => {
     if (editing) inputRef.current?.select();
@@ -27,13 +34,14 @@ const MemberSticker = ({ userName, hours, disciplineId, onDelete, onCopy, onEdit
   const confirmEdit = () => {
     const val = Number(editValue);
     if (val > 0 && onEditHours) {
+      setOptimisticHours(val);
       onEditHours(val);
     }
     setEditing(false);
   };
 
   const cancelEdit = () => {
-    setEditValue(String(hours));
+    setEditValue(String(displayHours));
     setEditing(false);
   };
 
@@ -83,7 +91,7 @@ const MemberSticker = ({ userName, hours, disciplineId, onDelete, onCopy, onEdit
           </button>
         </div>
       ) : (
-        <span className="font-bold shrink-0">{hours}h</span>
+        <span className="font-bold shrink-0">{displayHours}h</span>
       )}
 
       {hovered && !editing && (

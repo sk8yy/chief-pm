@@ -9,6 +9,9 @@ import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
 import {
@@ -64,6 +67,7 @@ const StickerWall: React.FC = () => {
   /* editing */
   const [editingSticker, setEditingSticker] = useState<Sticker | null>(null);
   const [editContent, setEditContent] = useState('');
+  const [editProjectId, setEditProjectId] = useState<string | null>(null);
 
   /* deleting */
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -134,7 +138,7 @@ const StickerWall: React.FC = () => {
 
   const handleSaveEdit = async () => {
     if (!editingSticker) return;
-    await updateSticker.mutateAsync({ id: editingSticker.id, content: editContent });
+    await updateSticker.mutateAsync({ id: editingSticker.id, content: editContent, project_id: editProjectId });
     setEditingSticker(null);
   };
 
@@ -234,7 +238,7 @@ const StickerWall: React.FC = () => {
               key={s.id}
               className="relative rounded-lg border p-3 cursor-pointer transition-shadow hover:shadow-md group overflow-hidden aspect-[4/3] flex flex-col"
               style={stickerBg(s)}
-              onDoubleClick={() => { setEditingSticker(s); setEditContent(s.content); }}
+              onDoubleClick={() => { setEditingSticker(s); setEditContent(s.content); setEditProjectId(s.project_id); }}
             >
               <button
                 className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-black/10 z-10"
@@ -299,9 +303,20 @@ const StickerWall: React.FC = () => {
             </DialogDescription>
           </DialogHeader>
           <Textarea autoFocus value={editContent} onChange={(e) => setEditContent(e.target.value)} className="min-h-[160px] bg-white/20 border-current/20" />
-          {editingSticker?.projects && (
-            <p className="text-xs opacity-70">Project: {editingSticker.projects.name}</p>
-          )}
+          <div className="space-y-1">
+            <label className="text-xs font-medium opacity-70">Project</label>
+            <Select value={editProjectId ?? '__none__'} onValueChange={(v) => setEditProjectId(v === '__none__' ? null : v)}>
+              <SelectTrigger className="bg-background">
+                <SelectValue placeholder="No project" />
+              </SelectTrigger>
+              <SelectContent className="bg-background z-[100]">
+                <SelectItem value="__none__">No project</SelectItem>
+                {projects?.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setEditingSticker(null)}>Cancel</Button>
             <Button onClick={handleSaveEdit} disabled={updateSticker.isPending}>

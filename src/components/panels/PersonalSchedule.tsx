@@ -463,7 +463,7 @@ const PersonalSchedule = () => {
                     </div>
 
                     {/* 7 day cells + block overlays in a relative container */}
-                    <div className="col-span-7 relative">
+                    <div className="col-span-7 relative" data-block-grid>
                       <div className="grid grid-cols-7">
                         {days.map((day, dayIdx) => {
                           const dateStr = format(day, 'yyyy-MM-dd');
@@ -507,20 +507,39 @@ const PersonalSchedule = () => {
                             endCol={endCol}
                             onDistributionChange={(dist) => handleBlockDistribution(project.id, dist)}
                             onDelete={() => handleBlockDelete(project.id, block.dates)}
-                            onResize={(direction) => {
+                            onResizeDrag={(direction, newCol) => {
                               if (direction === 'start') {
-                                const firstDate = block.dates[0];
-                                const firstIdx = days.findIndex(d => format(d, 'yyyy-MM-dd') === firstDate);
-                                if (firstIdx > 0) {
-                                  const prevDate = format(days[firstIdx - 1], 'yyyy-MM-dd');
-                                  handleHourChange(project.id, prevDate, 1);
+                                // Expand or shrink from start: add hours to newCol if before current start
+                                const targetCol = Math.min(newCol, endCol);
+                                for (let c = targetCol; c <= endCol; c++) {
+                                  const dateStr = format(days[c], 'yyyy-MM-dd');
+                                  const key = `${project.id}_${dateStr}`;
+                                  const entry = hoursMap[key];
+                                  const val = mode === 'plan' ? (entry?.planned_hours ?? 0) : (entry?.recorded_hours ?? 0);
+                                  if (val === 0) handleHourChange(project.id, dateStr, 1);
+                                }
+                                // Zero out days before targetCol that were in the old block
+                                for (let c = 0; c < targetCol; c++) {
+                                  const dateStr = format(days[c], 'yyyy-MM-dd');
+                                  if (block.dates.includes(dateStr)) {
+                                    handleHourChange(project.id, dateStr, 0);
+                                  }
                                 }
                               } else {
-                                const lastDate = block.dates[block.dates.length - 1];
-                                const lastIdx = days.findIndex(d => format(d, 'yyyy-MM-dd') === lastDate);
-                                if (lastIdx < 6) {
-                                  const nextDate = format(days[lastIdx + 1], 'yyyy-MM-dd');
-                                  handleHourChange(project.id, nextDate, 1);
+                                const targetCol = Math.max(newCol, startCol);
+                                for (let c = startCol; c <= targetCol; c++) {
+                                  const dateStr = format(days[c], 'yyyy-MM-dd');
+                                  const key = `${project.id}_${dateStr}`;
+                                  const entry = hoursMap[key];
+                                  const val = mode === 'plan' ? (entry?.planned_hours ?? 0) : (entry?.recorded_hours ?? 0);
+                                  if (val === 0) handleHourChange(project.id, dateStr, 1);
+                                }
+                                // Zero out days after targetCol that were in the old block
+                                for (let c = targetCol + 1; c <= 6; c++) {
+                                  const dateStr = format(days[c], 'yyyy-MM-dd');
+                                  if (block.dates.includes(dateStr)) {
+                                    handleHourChange(project.id, dateStr, 0);
+                                  }
                                 }
                               }
                             }}

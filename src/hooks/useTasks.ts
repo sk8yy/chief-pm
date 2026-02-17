@@ -62,7 +62,10 @@ export function useUpsertTask() {
         if (error) throw error;
       }
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['tasks'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['tasks'] });
+      qc.invalidateQueries({ queryKey: ['all_tasks'] });
+    },
   });
 }
 
@@ -73,7 +76,10 @@ export function useDeleteTask() {
       const { error } = await supabase.from('tasks').delete().eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['tasks'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['tasks'] });
+      qc.invalidateQueries({ queryKey: ['all_tasks'] });
+    },
   });
 }
 
@@ -84,6 +90,9 @@ export function useToggleTask() {
       const { error } = await supabase.from('tasks').update({ is_completed }).eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['tasks'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['tasks'] });
+      qc.invalidateQueries({ queryKey: ['all_tasks'] });
+    },
   });
 }

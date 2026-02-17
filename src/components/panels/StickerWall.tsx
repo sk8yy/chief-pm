@@ -6,6 +6,7 @@ import { useProjects } from '@/hooks/useProjects';
 import { getDisciplineColor } from '@/lib/colors';
 import { useDisciplines } from '@/hooks/useDisciplines';
 import CreateProjectDialog from '@/components/panels/CreateProjectDialog';
+import ExtractionConfirmDialog, { ExtractedDeadline, ExtractedTask } from '@/components/panels/ExtractionConfirmDialog';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
@@ -20,8 +21,10 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, Trash2, ArrowLeft, ZoomIn, Sparkles, Loader2, HelpCircle } from 'lucide-react';
+import { Plus, Trash2, ArrowLeft, ZoomIn, Sparkles, Loader2, HelpCircle, CheckSquare, X, Brain } from 'lucide-react';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
+import { format, startOfWeek } from 'date-fns';
 
 /* ───────── types ───────── */
 type Sticker = {
@@ -78,13 +81,135 @@ const StickerWall: React.FC = () => {
   /* create project dialog */
   const [showCreateProject, setShowCreateProject] = useState(false);
 
-  /* AI match */
+  /* AI match (single sticker) */
   const [isMatching, setIsMatching] = useState(false);
   const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
   const [matchStickerId, setMatchStickerId] = useState<string | null>(null);
   const [noMatchStickerId, setNoMatchStickerId] = useState<string | null>(null);
 
-  /* ───── handlers ───── */
+  /* ── multi-select & AI analysis ── */
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [extractedDeadlines, setExtractedDeadlines] = useState<ExtractedDeadline[]>([]);
+  const [extractedTasks, setExtractedTasks] = useState<ExtractedTask[]>([]);
+  const [showExtraction, setShowExtraction] = useState(false);
+  const [isSavingExtraction, setIsSavingExtraction] = useState(false);
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  };
+
+  /* ── AI analysis handler ── */
+  const handleAnalyze = async () => {
+    if (!selectedIds.size || !stickers) return;
+    setIsAnalyzing(true);
+    try {
+      const selectedStickers = (stickers as Sticker[])
+        .filter(s => selectedIds.has(s.id))
+        .map((s, i) => ({
+          index: i + 1,
+          content: s.content,
+          project_name: s.projects?.name || null,
+        }));
+
+      const resp = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-stickers`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({
+            stickers: selectedStickers,
+            projects: projects?.map(p => ({ id: p.id, name: p.name, job_number: p.job_number })) ?? [],
+            users: users?.map(u => ({ id: u.id, name: u.name })) ?? [],
+          }),
+        }
+      );
+
+      if (!resp.ok) {
+        if (resp.status === 429) { toast.error('AI rate limit reached, try again later.'); return; }
+        if (resp.status === 402) { toast.error('AI credits exhausted.'); return; }
+        throw new Error('AI analysis failed');
+      }
+
+      const data = await resp.json();
+      setExtractedDeadlines(data.deadlines || []);
+      setExtractedTasks(data.tasks || []);
+      setShowExtraction(true);
+    } catch (e) {
+      console.error('AI analysis error:', e);
+      toast.error('Failed to analyze stickers.');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  /* ── save extracted items ── */
+  const handleConfirmExtraction = async (deadlines: ExtractedDeadline[], tasks: ExtractedTask[]) => {
+    if (!currentUserId) return;
+    setIsSavingExtraction(true);
+    try {
+      const weekStart = format(startOfWeek(new Date(), { weekStartsOn: 1 }), 'yyyy-MM-dd');
+
+      // Insert deadlines
+      if (deadlines.length > 0) {
+        const rows = deadlines
+          .filter(d => d.name && d.date && d.project_id)
+          .map(d => ({
+            name: d.name,
+            date: d.date,
+            project_id: d.project_id!,
+            created_by: currentUserId,
+            type: 'project' as const,
+          }));
+        if (rows.length) {
+          const { error } = await supabase.from('deadlines').insert(rows);
+          if (error) throw error;
+        }
+      }
+
+      // Insert tasks
+      if (tasks.length > 0) {
+        const rows = tasks
+          .filter(t => t.description && t.project_id)
+          .map(t => ({
+            description: t.description,
+            project_id: t.project_id!,
+            user_id: t.user_id || currentUserId,
+            week_start: weekStart,
+            is_planned: true,
+            is_completed: false,
+          }));
+        if (rows.length) {
+          const { error } = await supabase.from('tasks').insert(rows);
+          if (error) throw error;
+        }
+      }
+
+      toast.success(`Saved ${deadlines.length} deadline(s) and ${tasks.length} task(s).`);
+      setShowExtraction(false);
+      exitSelectMode();
+    } catch (e) {
+      console.error('Save extraction error:', e);
+      toast.error('Failed to save extracted items.');
+    } finally {
+      setIsSavingExtraction(false);
+    }
+  };
+
+  /* ───── existing handlers ───── */
   const requestAIMatch = async (stickerId: string, content: string) => {
     if (!projects?.length) return;
     setIsMatching(true);
@@ -113,7 +238,6 @@ const StickerWall: React.FC = () => {
         setMatchResult(data);
         setMatchStickerId(stickerId);
       } else {
-        // No match found — prompt user to create a new project
         setNoMatchStickerId(stickerId);
       }
     } catch (e) {
@@ -129,7 +253,6 @@ const StickerWall: React.FC = () => {
     const content = newContent.trim();
     setNewContent('');
     setIsCreating(false);
-    // fire AI match in background
     requestAIMatch(result.id, content);
   };
 
@@ -141,10 +264,7 @@ const StickerWall: React.FC = () => {
     setMatchStickerId(null);
   };
 
-  const handleRejectMatch = () => {
-    setMatchResult(null);
-    setMatchStickerId(null);
-  };
+  const handleRejectMatch = () => { setMatchResult(null); setMatchStickerId(null); };
 
   const handleSaveEdit = async () => {
     if (!editingSticker) return;
@@ -187,6 +307,28 @@ const StickerWall: React.FC = () => {
         <h2 className="text-lg font-semibold">Sticker Wall</h2>
 
         <div className="flex items-center gap-4 flex-wrap">
+          {/* multi-select toggle */}
+          {!selectMode ? (
+            <Button variant="outline" size="sm" onClick={() => setSelectMode(true)} disabled={!stickers?.length}>
+              <CheckSquare className="h-3.5 w-3.5 mr-1" /> Select
+            </Button>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">{selectedIds.size} selected</span>
+              <Button
+                size="sm"
+                onClick={handleAnalyze}
+                disabled={selectedIds.size === 0 || isAnalyzing}
+              >
+                {isAnalyzing ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Brain className="h-3.5 w-3.5 mr-1" />}
+                Analyze
+              </Button>
+              <Button variant="ghost" size="sm" onClick={exitSelectMode}>
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          )}
+
           {/* my / all toggle */}
           <div className="flex items-center gap-2 text-sm">
             <span className={!showAll ? 'font-semibold text-foreground' : 'text-muted-foreground'}>My</span>
@@ -243,34 +385,51 @@ const StickerWall: React.FC = () => {
       {/* tile grid */}
       {(stickers?.length ?? 0) > 0 && (
         <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
-          {(stickers as Sticker[])?.map((s) => (
-            <div
-              key={s.id}
-              className="relative rounded-lg border p-3 cursor-pointer transition-shadow hover:shadow-md group overflow-hidden aspect-[4/3] flex flex-col"
-              style={stickerBg(s)}
-              onDoubleClick={() => { setEditingSticker(s); setEditContent(s.content); setEditProjectId(s.project_id); }}
-            >
-              <button
-                className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-black/10 z-10"
-                onClick={(e) => { e.stopPropagation(); setDeletingId(s.id); }}
+          {(stickers as Sticker[])?.map((s) => {
+            const isSelected = selectedIds.has(s.id);
+            return (
+              <div
+                key={s.id}
+                className={`relative rounded-lg border p-3 cursor-pointer transition-all hover:shadow-md group overflow-hidden aspect-[4/3] flex flex-col ${
+                  isSelected ? 'ring-2 ring-primary ring-offset-2' : ''
+                }`}
+                style={stickerBg(s)}
+                onClick={selectMode ? () => toggleSelect(s.id) : undefined}
+                onDoubleClick={!selectMode ? () => { setEditingSticker(s); setEditContent(s.content); setEditProjectId(s.project_id); } : undefined}
               >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-
-              <p className="flex-1 text-sm whitespace-pre-wrap overflow-hidden leading-snug">{s.content}</p>
-
-              <div className="flex items-end justify-between gap-1 mt-1 shrink-0">
-                {s.projects && (
-                  <span className="text-[10px] font-medium opacity-70 truncate">{s.projects.name}</span>
+                {/* select checkbox overlay */}
+                {selectMode && (
+                  <div className={`absolute top-1.5 left-1.5 w-5 h-5 rounded border-2 flex items-center justify-center z-10 ${
+                    isSelected ? 'bg-primary border-primary' : 'border-white/60 bg-black/20'
+                  }`}>
+                    {isSelected && <CheckSquare className="h-3 w-3 text-primary-foreground" />}
+                  </div>
                 )}
-                {showAll && (
-                  <span className="text-[9px] opacity-50 whitespace-nowrap">
-                    {users?.find((u) => u.id === s.user_id)?.name ?? 'Unknown'}
-                  </span>
+
+                {!selectMode && (
+                  <button
+                    className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-black/10 z-10"
+                    onClick={(e) => { e.stopPropagation(); setDeletingId(s.id); }}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
                 )}
+
+                <p className="flex-1 text-sm whitespace-pre-wrap overflow-hidden leading-snug">{s.content}</p>
+
+                <div className="flex items-end justify-between gap-1 mt-1 shrink-0">
+                  {s.projects && (
+                    <span className="text-[10px] font-medium opacity-70 truncate">{s.projects.name}</span>
+                  )}
+                  {showAll && (
+                    <span className="text-[9px] opacity-50 whitespace-nowrap">
+                      {users?.find((u) => u.id === s.user_id)?.name ?? 'Unknown'}
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -281,9 +440,7 @@ const StickerWall: React.FC = () => {
             <DialogTitle className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-primary" /> Project Match Found
             </DialogTitle>
-            <DialogDescription>
-              AI detected a link to an existing project.
-            </DialogDescription>
+            <DialogDescription>AI detected a link to an existing project.</DialogDescription>
           </DialogHeader>
           {matchedProject && (
             <div className="space-y-2">
@@ -366,9 +523,7 @@ const StickerWall: React.FC = () => {
             <DialogTitle className="flex items-center gap-2">
               <HelpCircle className="h-5 w-5 text-muted-foreground" /> No Match Found
             </DialogTitle>
-            <DialogDescription>
-              Couldn't find a matching project. Would you like to create a new one?
-            </DialogDescription>
+            <DialogDescription>Couldn't find a matching project. Would you like to create a new one?</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setNoMatchStickerId(null)}>Skip</Button>
@@ -386,7 +541,6 @@ const StickerWall: React.FC = () => {
         disciplines={disciplines ?? []}
         users={users ?? []}
         onCreated={async (projectId) => {
-          // Auto-link the sticker if we came from a no-match prompt
           const stickerToLink = noMatchStickerId;
           if (stickerToLink) {
             await updateSticker.mutateAsync({ id: stickerToLink, project_id: projectId });
@@ -394,6 +548,18 @@ const StickerWall: React.FC = () => {
             setNoMatchStickerId(null);
           }
         }}
+      />
+
+      {/* extraction confirmation dialog */}
+      <ExtractionConfirmDialog
+        open={showExtraction}
+        onClose={() => setShowExtraction(false)}
+        deadlines={extractedDeadlines}
+        tasks={extractedTasks}
+        projects={projects?.map(p => ({ id: p.id, name: p.name })) ?? []}
+        users={users?.map(u => ({ id: u.id, name: u.name })) ?? []}
+        onConfirm={handleConfirmExtraction}
+        isSaving={isSavingExtraction}
       />
     </div>
   );

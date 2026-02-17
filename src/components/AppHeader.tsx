@@ -34,16 +34,14 @@ const AppHeader = () => {
       </nav>
 
       <div className="flex items-center gap-4">
-        {activePanel !== 'sticker' && (
-          <div className="flex items-center gap-2 text-sm">
-            <span className={mode === 'plan' ? 'font-semibold text-foreground' : 'text-muted-foreground'}>Plan</span>
-            <Switch
-              checked={mode === 'record'}
-              onCheckedChange={(checked) => setMode(checked ? 'record' : 'plan')}
-            />
-            <span className={mode === 'record' ? 'font-semibold text-foreground' : 'text-muted-foreground'}>Record</span>
-          </div>
-        )}
+        <div className="flex items-center gap-2 text-sm">
+          <span className={mode === 'plan' ? 'font-semibold text-foreground' : 'text-muted-foreground'}>Plan</span>
+          <Switch
+            checked={mode === 'record'}
+            onCheckedChange={(checked) => setMode(checked ? 'record' : 'plan')}
+          />
+          <span className={mode === 'record' ? 'font-semibold text-foreground' : 'text-muted-foreground'}>Record</span>
+        </div>
 
         {(activePanel === 'personal' || activePanel === 'sticker') && (
           <Select value={currentUserId ?? ''} onValueChange={setCurrentUserId}>

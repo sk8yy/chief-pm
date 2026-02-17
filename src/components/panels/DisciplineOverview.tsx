@@ -21,6 +21,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import MemberSticker from './MemberSticker';
 import AddMemberDialog from './AddMemberDialog';
 import CreateProjectDialog from './CreateProjectDialog';
+import AddDisciplineDialog from './AddDisciplineDialog';
 import TaskList from './TaskList';
 
 const DisciplineOverview = () => {
@@ -33,6 +34,13 @@ const DisciplineOverview = () => {
   // Create project dialog state
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [createDialogDisciplineId, setCreateDialogDisciplineId] = useState<string | null>(null);
+
+  // Add discipline dialog state
+  const [addDisciplineOpen, setAddDisciplineOpen] = useState(false);
+
+  // Inline project name editing state
+  const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
+  const [editProjectName, setEditProjectName] = useState('');
 
   // Add person form state
   const [addingPersonTo, setAddingPersonTo] = useState<string | null>(null);
@@ -176,6 +184,13 @@ const DisciplineOverview = () => {
 
   const deleteProject = async (projectId: string) => {
     await supabase.from('projects').delete().eq('id', projectId);
+    queryClient.invalidateQueries({ queryKey: ['projects'] });
+  };
+
+  const renameProject = async (projectId: string) => {
+    if (!editProjectName.trim()) { setEditingProjectId(null); return; }
+    await supabase.from('projects').update({ name: editProjectName.trim() }).eq('id', projectId);
+    setEditingProjectId(null);
     queryClient.invalidateQueries({ queryKey: ['projects'] });
   };
 
@@ -323,7 +338,10 @@ const DisciplineOverview = () => {
         <span className="text-xs text-muted-foreground ml-2">
           {mode === 'plan' ? 'Planned hours' : 'Recorded hours'}
         </span>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setAddDisciplineOpen(true)}>
+            <Plus className="h-3.5 w-3.5 mr-1" /> Add Group
+          </Button>
           <Button variant="outline" size="sm" onClick={() => setShowAddDeadline(!showAddDeadline)}>
             <Plus className="h-3.5 w-3.5 mr-1" /> Add Deadline
           </Button>
@@ -465,7 +483,23 @@ const DisciplineOverview = () => {
                               onClick={() => toggleProject(project.id)}
                             >
                               {projectExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                              <span className="truncate">{project.name}</span>
+                              {editingProjectId === project.id ? (
+                                <Input
+                                  value={editProjectName}
+                                  onChange={e => setEditProjectName(e.target.value)}
+                                  onBlur={() => renameProject(project.id)}
+                                  onKeyDown={e => { if (e.key === 'Enter') renameProject(project.id); if (e.key === 'Escape') setEditingProjectId(null); }}
+                                  className="h-6 text-sm px-1 w-24"
+                                  autoFocus
+                                  onClick={e => e.stopPropagation()}
+                                />
+                              ) : (
+                                <span
+                                  className="truncate cursor-text"
+                                  onDoubleClick={(e) => { e.stopPropagation(); setEditingProjectId(project.id); setEditProjectName(project.name); }}
+                                  title="Double-click to rename"
+                                >{project.name}</span>
+                              )}
                               <span className="text-[10px] text-muted-foreground ml-auto shrink-0">{project.job_number}</span>
                             </div>
                             {weeks.map((ws) => {
@@ -810,6 +844,13 @@ const DisciplineOverview = () => {
         disciplines={disciplines ?? []}
         users={users ?? []}
         defaultDisciplineId={createDialogDisciplineId}
+      />
+
+      {/* Add Discipline Dialog */}
+      <AddDisciplineDialog
+        open={addDisciplineOpen}
+        onClose={() => setAddDisciplineOpen(false)}
+        existingCount={disciplines?.length ?? 0}
       />
     </div>
     </TooltipProvider>

@@ -4,12 +4,14 @@ import { useAppContext } from '@/contexts/AppContext';
 import { useProjects } from '@/hooks/useProjects';
 import { useDisciplines } from '@/hooks/useDisciplines';
 import { useHours, useUpsertHours } from '@/hooks/useHours';
+import { useUserAssignments, useAssignMember } from '@/hooks/useAssignments';
 import { getDisciplineColor, getDisciplineColorRecord } from '@/lib/colors';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import HourCell from './HourCell';
 import HourBlock, { BlockData } from './HourBlock';
 import TimeSummaryTable from './TimeSummaryTable';
+import AddProjectDialog from './AddProjectDialog';
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -56,6 +58,7 @@ function detectBlocks(
 const PersonalSchedule = () => {
   const { currentUserId, mode } = useAppContext();
   const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [showAddProject, setShowAddProject] = useState(false);
   const { data: projects } = useProjects();
   const { data: disciplines } = useDisciplines();
 
@@ -73,6 +76,25 @@ const PersonalSchedule = () => {
 
   const { data: hours } = useHours(currentUserId, dateRange);
   const upsertHours = useUpsertHours();
+  const { data: userAssignments } = useUserAssignments(currentUserId, dateRange);
+  const assignMember = useAssignMember();
+
+  // Build set of assigned project IDs across all visible weeks
+  const assignedProjectIds = useMemo(() => {
+    const ids = new Set<string>();
+    userAssignments?.forEach((a) => ids.add(a.project_id));
+    return ids;
+  }, [userAssignments]);
+
+  // Per-week assignment map: weekStart -> Set<projectId>
+  const weekAssignmentMap = useMemo(() => {
+    const map: Record<string, Set<string>> = {};
+    userAssignments?.forEach((a) => {
+      if (!map[a.week_start]) map[a.week_start] = new Set();
+      map[a.week_start].add(a.project_id);
+    });
+    return map;
+  }, [userAssignments]);
 
   // Drag state for creating new blocks
   const [dragState, setDragState] = useState<{
@@ -109,13 +131,16 @@ const PersonalSchedule = () => {
     return () => window.removeEventListener('mouseup', handleUp);
   }, []);
 
+  // Filter projects to only those assigned to this user in the current month
   const groupedProjects = useMemo(() => {
     if (!projects || !disciplines) return [];
+    const assignedIds = assignedProjectIds;
+    const filteredProjects = projects.filter((p) => assignedIds.has(p.id));
     return disciplines.map((d) => ({
       discipline: d,
-      projects: projects.filter((p) => p.discipline_id === d.id),
+      projects: filteredProjects.filter((p) => p.discipline_id === d.id),
     })).filter((g) => g.projects.length > 0);
-  }, [projects, disciplines]);
+  }, [projects, disciplines, assignedProjectIds]);
 
   const hoursMap = useMemo(() => {
     const map: Record<string, { planned_hours: number; recorded_hours: number | null }> = {};
@@ -161,6 +186,20 @@ const PersonalSchedule = () => {
     });
   }, []);
 
+  // Self-assign projects
+  const handleAddProjects = useCallback((projectIds: string[]) => {
+    if (!currentUserId) return;
+    const weekStarts = weeks.map((ws) => format(ws, 'yyyy-MM-dd'));
+    projectIds.forEach((pid) => {
+      assignMember.mutate({
+        user_id: currentUserId,
+        project_id: pid,
+        week_starts: weekStarts,
+      });
+    });
+    setShowAddProject(false);
+  }, [currentUserId, weeks, assignMember]);
+
   if (!currentUserId) {
     return (
       <div className="flex items-center justify-center p-12 text-muted-foreground">
@@ -171,7 +210,7 @@ const PersonalSchedule = () => {
 
   return (
     <div className="p-4 space-y-4">
-      {/* Month navigation */}
+      {/* Month navigation + Add Project button */}
       <div className="flex items-center gap-3">
         <Button variant="outline" size="icon" onClick={() => setCurrentMonth((m) => subMonths(m, 1))}>
           <ChevronLeft className="h-4 w-4" />
@@ -182,7 +221,20 @@ const PersonalSchedule = () => {
         <Button variant="outline" size="icon" onClick={() => setCurrentMonth((m) => addMonths(m, 1))}>
           <ChevronRight className="h-4 w-4" />
         </Button>
+        <Button variant="outline" size="sm" className="ml-auto" onClick={() => setShowAddProject(true)}>
+          <Plus className="h-3.5 w-3.5 mr-1" /> Add Project
+        </Button>
       </div>
+
+      {/* No projects message */}
+      {groupedProjects.length === 0 && (
+        <div className="flex flex-col items-center justify-center p-8 text-muted-foreground border rounded-lg bg-card">
+          <p className="text-sm mb-2">No projects assigned for this month.</p>
+          <Button variant="outline" size="sm" onClick={() => setShowAddProject(true)}>
+            <Plus className="h-3.5 w-3.5 mr-1" /> Add Project
+          </Button>
+        </div>
+      )}
 
       {/* Weekly grids */}
       {weeks.map((weekStart) => {
@@ -191,6 +243,16 @@ const PersonalSchedule = () => {
           start: weekStart,
           end: endOfWeek(weekStart, { weekStartsOn: 1 }),
         });
+
+        // Get projects assigned for this specific week
+        const weekStartStr = format(weekStart, 'yyyy-MM-dd');
+        const weekAssigned = weekAssignmentMap[weekStartStr] ?? new Set();
+
+        // Filter grouped projects to only those assigned this week
+        const weekGroupedProjects = groupedProjects.map(g => ({
+          ...g,
+          projects: g.projects.filter(p => weekAssigned.has(p.id)),
+        })).filter(g => g.projects.length > 0);
 
         // Resolve newBlock dates if this is the target week
         let resolvedNewBlock: { projectId: string; dates: string[] } | null = null;
@@ -205,7 +267,7 @@ const PersonalSchedule = () => {
         }
 
         let weekTotal = 0;
-        groupedProjects.forEach((g) =>
+        weekGroupedProjects.forEach((g) =>
           g.projects.forEach((p) =>
             days.forEach((day) => {
               const key = `${p.id}_${format(day, 'yyyy-MM-dd')}`;
@@ -217,6 +279,8 @@ const PersonalSchedule = () => {
           )
         );
         const ot = Math.max(0, weekTotal - 40);
+
+        if (weekGroupedProjects.length === 0) return null;
 
         return (
           <div key={weekKey} className="border rounded-lg overflow-hidden bg-card">
@@ -238,7 +302,7 @@ const PersonalSchedule = () => {
             </div>
 
             {/* Project rows */}
-            {groupedProjects.map((group) => {
+            {weekGroupedProjects.map((group) => {
               const colors = mode === 'record'
                 ? getDisciplineColorRecord(group.discipline.id)
                 : getDisciplineColor(group.discipline.id);
@@ -400,7 +464,7 @@ const PersonalSchedule = () => {
               {days.map((day) => {
                 const dateStr = format(day, 'yyyy-MM-dd');
                 let dayTotal = 0;
-                groupedProjects.forEach((g) =>
+                weekGroupedProjects.forEach((g) =>
                   g.projects.forEach((p) => {
                     const entry = hoursMap[`${p.id}_${dateStr}`];
                     if (entry) dayTotal += mode === 'plan' ? entry.planned_hours : (entry.recorded_hours ?? 0);
@@ -425,7 +489,7 @@ const PersonalSchedule = () => {
               {days.map((day) => {
                 const dateStr = format(day, 'yyyy-MM-dd');
                 let dayTotal = 0;
-                groupedProjects.forEach((g) =>
+                weekGroupedProjects.forEach((g) =>
                   g.projects.forEach((p) => {
                     const entry = hoursMap[`${p.id}_${dateStr}`];
                     if (entry) dayTotal += mode === 'plan' ? entry.planned_hours : (entry.recorded_hours ?? 0);
@@ -443,7 +507,7 @@ const PersonalSchedule = () => {
                   const weeklyDailyOt = days.reduce((sum, day) => {
                     const dateStr = format(day, 'yyyy-MM-dd');
                     let dayTotal = 0;
-                    groupedProjects.forEach((g) =>
+                    weekGroupedProjects.forEach((g) =>
                       g.projects.forEach((p) => {
                         const entry = hoursMap[`${p.id}_${dateStr}`];
                         if (entry) dayTotal += mode === 'plan' ? entry.planned_hours : (entry.recorded_hours ?? 0);
@@ -467,6 +531,18 @@ const PersonalSchedule = () => {
         mode={mode}
         currentMonth={currentMonth}
       />
+
+      {/* Add Project Dialog */}
+      {showAddProject && projects && disciplines && (
+        <AddProjectDialog
+          open={showAddProject}
+          onClose={() => setShowAddProject(false)}
+          onConfirm={handleAddProjects}
+          projects={projects}
+          disciplines={disciplines}
+          assignedProjectIds={assignedProjectIds}
+        />
+      )}
     </div>
   );
 };

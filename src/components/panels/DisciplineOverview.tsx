@@ -5,6 +5,7 @@ import { useProjects } from '@/hooks/useProjects';
 import { useDisciplines } from '@/hooks/useDisciplines';
 import { useUsers } from '@/hooks/useUsers';
 import { useAllHours } from '@/hooks/useAllHours';
+import { useAllAssignments, useAssignMember, useUnassignMember } from '@/hooks/useAssignments';
 import { getDisciplineColor, getDisciplineColorRecord } from '@/lib/colors';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -61,7 +62,9 @@ const DisciplineOverview = () => {
   }), [monthStart.getTime(), monthEnd.getTime()]);
 
   const { data: allHours } = useAllHours(dateRange);
-
+  const { data: allAssignments } = useAllAssignments(dateRange);
+  const assignMemberMut = useAssignMember();
+  const unassignMemberMut = useUnassignMember();
   const hoursMap = useMemo(() => {
     const map: Record<string, { planned_hours: number; recorded_hours: number | null }> = {};
     allHours?.forEach((h) => {
@@ -214,9 +217,15 @@ const DisciplineOverview = () => {
         });
       }
     }
+    // Also create assignment record
+    assignMemberMut.mutate({
+      user_id: userId,
+      project_id: projectId,
+      week_starts: [format(weekStart, 'yyyy-MM-dd')],
+    });
     queryClient.invalidateQueries({ queryKey: ['all_hours'] });
     queryClient.invalidateQueries({ queryKey: ['hours'] });
-  }, [mode, queryClient]);
+  }, [mode, queryClient, assignMemberMut]);
 
   const deleteStickerHours = useCallback(async (userId: string, projectId: string, weekStart: Date) => {
     const days = eachDayOfInterval({ start: weekStart, end: endOfWeek(weekStart, { weekStartsOn: 1 }) });
@@ -234,9 +243,15 @@ const DisciplineOverview = () => {
         await supabase.from('hours').update({ [field]: field === 'planned_hours' ? 0 : null }).eq('id', existing.id);
       }
     }
+    // Also remove assignment record
+    unassignMemberMut.mutate({
+      user_id: userId,
+      project_id: projectId,
+      week_starts: [format(weekStart, 'yyyy-MM-dd')],
+    });
     queryClient.invalidateQueries({ queryKey: ['all_hours'] });
     queryClient.invalidateQueries({ queryKey: ['hours'] });
-  }, [mode, queryClient]);
+  }, [mode, queryClient, unassignMemberMut]);
 
   // Get per-user hours for a project+week (for stickers)
   const getProjectWeekStickers = useCallback((projectId: string, weekStart: Date) => {

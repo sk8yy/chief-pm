@@ -6,6 +6,7 @@ import { useDisciplines } from '@/hooks/useDisciplines';
 import { useUsers } from '@/hooks/useUsers';
 import { useAllHours } from '@/hooks/useAllHours';
 import { useProjectDeadlines, useAddDeadline, useDeleteDeadline } from '@/hooks/useDeadlines';
+import { useProjectAssignments, useAssignMember, useUnassignMember } from '@/hooks/useAssignments';
 import { getDisciplineColor } from '@/lib/colors';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
@@ -49,6 +50,9 @@ const ProjectManagement = () => {
 
   const { data: allHours } = useAllHours(dateRange);
   const { data: deadlines } = useProjectDeadlines(selectedProjectId || undefined);
+  const { data: projectAssignments } = useProjectAssignments(selectedProjectId || undefined, dateRange);
+  const assignMemberMut = useAssignMember();
+  const unassignMemberMut = useUnassignMember();
   const addDeadline = useAddDeadline();
   const deleteDeadline = useDeleteDeadline();
 
@@ -138,6 +142,13 @@ const ProjectManagement = () => {
       }));
     });
     await supabase.from('hours').upsert(rows, { onConflict: 'user_id,project_id,date', ignoreDuplicates: true });
+    // Also create assignment records for all visible weeks
+    const weekStarts = weeks.map((ws) => format(ws, 'yyyy-MM-dd'));
+    assignMemberMut.mutate({
+      user_id: userId,
+      project_id: selectedProjectId,
+      week_starts: weekStarts,
+    });
     qc.invalidateQueries({ queryKey: ['all_hours'] });
   };
 
@@ -145,6 +156,13 @@ const ProjectManagement = () => {
   const handleRemoveMember = async (userId: string) => {
     if (!selectedProjectId) return;
     await supabase.from('hours').delete().eq('user_id', userId).eq('project_id', selectedProjectId).gte('date', dateRange.start).lte('date', dateRange.end);
+    // Also remove assignment records
+    const weekStarts = weeks.map((ws) => format(ws, 'yyyy-MM-dd'));
+    unassignMemberMut.mutate({
+      user_id: userId,
+      project_id: selectedProjectId,
+      week_starts: weekStarts,
+    });
     qc.invalidateQueries({ queryKey: ['all_hours'] });
   };
 

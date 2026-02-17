@@ -57,11 +57,12 @@ const CreateProjectDialog = ({ open, onClose, disciplines, users, defaultDiscipl
     }
   }, [open, defaultDisciplineId]);
 
-  // Outside click
+  // Outside click — ignore clicks inside Radix portals (Select dropdowns etc.)
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (dialogRef.current && !dialogRef.current.contains(e.target as Node)) {
+      const target = e.target as HTMLElement;
+      if (dialogRef.current && !dialogRef.current.contains(target) && !target.closest('[data-radix-popper-content-wrapper]')) {
         onClose();
       }
     };

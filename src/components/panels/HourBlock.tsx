@@ -1,23 +1,31 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { format } from 'date-fns';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Button } from '@/components/ui/button';
+import { X } from 'lucide-react';
 
 export interface BlockData {
   projectId: string;
-  dates: string[]; // sorted date strings
-  distribution: Record<string, number>; // date -> hours
+  dates: string[];
+  distribution: Record<string, number>;
 }
 
 interface HourBlockProps {
   block: BlockData;
   color: string;
   borderColor: string;
-  /** Column indices (0-6) this block spans */
   startCol: number;
   endCol: number;
-  isNew?: boolean; // just created via drag, needs total input
+  isNew?: boolean;
   onDistributionChange: (distribution: Record<string, number>) => void;
   onDelete?: () => void;
+}
+
+/** Distribute `total` integer hours as evenly as possible across `count` days */
+function distributeEvenly(total: number, count: number): number[] {
+  const base = Math.floor(total / count);
+  const remainder = total % count;
+  return Array.from({ length: count }, (_, i) => base + (i < remainder ? 1 : 0));
 }
 
 const HourBlock = ({
@@ -28,6 +36,7 @@ const HourBlock = ({
   endCol,
   isNew,
   onDistributionChange,
+  onDelete,
 }: HourBlockProps) => {
   const total = Object.values(block.distribution).reduce((s, v) => s + v, 0);
   const [showPopover, setShowPopover] = useState(false);
@@ -50,27 +59,38 @@ const HourBlock = ({
 
   const commitInline = useCallback(() => {
     setInlineEditing(false);
-    const num = parseFloat(inlineDraft);
+    const num = parseInt(inlineDraft, 10);
     if (isNaN(num) || num <= 0) return;
-    // Distribute evenly
-    const count = block.dates.length;
-    const perDay = Math.round((num / count) * 100) / 100;
+    const vals = distributeEvenly(num, block.dates.length);
     const dist: Record<string, number> = {};
-    block.dates.forEach((d, i) => {
-      // last day gets remainder to ensure exact total
-      dist[d] = i === count - 1 ? Math.round((num - perDay * (count - 1)) * 100) / 100 : perDay;
-    });
+    block.dates.forEach((d, i) => { dist[d] = vals[i]; });
     onDistributionChange(dist);
   }, [inlineDraft, block.dates, onDistributionChange]);
 
-  const commitPopover = useCallback(() => {
+  const handleConfirm = useCallback(() => {
     setShowPopover(false);
     onDistributionChange(localDist);
   }, [localDist, onDistributionChange]);
 
+  const handleDiscard = useCallback(() => {
+    setShowPopover(false);
+    // Don't save — just close
+  }, []);
+
+  const handleDelete = useCallback(() => {
+    setShowPopover(false);
+    if (onDelete) {
+      onDelete();
+    } else {
+      // Clear all hours to 0
+      const zeroDist: Record<string, number> = {};
+      block.dates.forEach((d) => { zeroDist[d] = 0; });
+      onDistributionChange(zeroDist);
+    }
+  }, [block.dates, onDelete, onDistributionChange]);
+
   const localTotal = Object.values(localDist).reduce((s, v) => s + v, 0);
 
-  // Position: percentage-based within the 7-col area
   const leftPct = (startCol / 7) * 100;
   const widthPct = ((endCol - startCol + 1) / 7) * 100;
 
@@ -85,12 +105,16 @@ const HourBlock = ({
       }}
     >
       <Popover open={showPopover} onOpenChange={(open) => {
-        if (!open) commitPopover();
-        else setShowPopover(true);
+        if (!open) {
+          // Closing without buttons = discard
+          setShowPopover(false);
+        } else {
+          setShowPopover(true);
+        }
       }}>
         <PopoverTrigger asChild>
           <div
-            className="w-full h-[28px] rounded-md flex items-center justify-center cursor-pointer text-sm font-semibold tabular-nums select-none"
+            className="w-full h-[28px] rounded-md flex items-center justify-center cursor-pointer text-sm font-semibold tabular-nums select-none relative group"
             style={{
               backgroundColor: `${color}40`,
               border: `2px solid ${borderColor}`,
@@ -104,6 +128,19 @@ const HourBlock = ({
               setShowPopover(true);
             }}
           >
+            {/* Delete button */}
+            {!inlineEditing && total > 0 && (
+              <button
+                className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-20"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDelete();
+                }}
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
+
             {inlineEditing ? (
               <input
                 ref={inlineRef}
@@ -112,7 +149,11 @@ const HourBlock = ({
                 placeholder="hrs"
                 value={inlineDraft}
                 onClick={(e) => e.stopPropagation()}
-                onChange={(e) => setInlineDraft(e.target.value)}
+                onChange={(e) => {
+                  // Integer only
+                  const val = e.target.value.replace(/[^0-9]/g, '');
+                  setInlineDraft(val);
+                }}
                 onBlur={commitInline}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') commitInline();
@@ -139,12 +180,12 @@ const HourBlock = ({
                   <input
                     type="number"
                     min={0}
-                    step={0.5}
+                    step={1}
                     className="w-16 h-7 rounded border border-input bg-background px-2 text-center text-sm tabular-nums outline-none focus:ring-1 focus:ring-ring"
                     value={localDist[dateStr] ?? 0}
                     onChange={(e) => {
-                      const v = parseFloat(e.target.value) || 0;
-                      setLocalDist((prev) => ({ ...prev, [dateStr]: v }));
+                      const v = parseInt(e.target.value, 10) || 0;
+                      setLocalDist((prev) => ({ ...prev, [dateStr]: Math.max(0, v) }));
                     }}
                   />
                 </div>
@@ -152,7 +193,15 @@ const HourBlock = ({
             })}
             <div className="flex items-center gap-2 text-sm font-semibold pt-1 border-t">
               <span className="w-14">Total</span>
-              <span className="w-16 text-center tabular-nums">{Math.round(localTotal * 100) / 100}</span>
+              <span className="w-16 text-center tabular-nums">{localTotal}</span>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" size="sm" className="flex-1" onClick={handleDiscard}>
+                Discard
+              </Button>
+              <Button size="sm" className="flex-1" onClick={handleConfirm}>
+                Confirm
+              </Button>
             </div>
           </div>
         </PopoverContent>

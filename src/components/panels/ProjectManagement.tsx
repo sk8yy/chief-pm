@@ -523,7 +523,7 @@ const ProjectManagement = () => {
                       </SelectContent>
                     </Select>
                     <span className="font-medium">{d.name}</span>
-                    <span className="text-muted-foreground ml-auto">{format(new Date(d.date), 'dd MMM yyyy')}</span>
+                    <span className="text-muted-foreground ml-auto">{format(new Date(d.date + 'T00:00:00'), 'dd MMM yyyy')}</span>
                   </div>
                 );
               })}

@@ -80,11 +80,13 @@ const TaskGantt: React.FC<Props> = ({ tasks, projectId, projectName, users, onTo
 
     tasks.forEach(t => {
       if (t.start_date) {
-        const sd = parseISO(t.start_date);
+        const [y, m, d] = t.start_date.split('-').map(Number);
+        const sd = new Date(y, m - 1, d);
         if (isBefore(sd, earliest)) earliest = startOfWeek(sd, { weekStartsOn: 1 });
       }
       if (t.end_date) {
-        const ed = parseISO(t.end_date);
+        const [y, m, d] = t.end_date.split('-').map(Number);
+        const ed = new Date(y, m - 1, d);
         if (isAfter(ed, latest)) latest = endOfWeek(ed, { weekStartsOn: 1 });
       }
     });
@@ -104,7 +106,8 @@ const TaskGantt: React.FC<Props> = ({ tasks, projectId, projectName, users, onTo
   const getTaskColor = useCallback((index: number) => TASK_COLORS[index % TASK_COLORS.length], []);
 
   const getDateCol = useCallback((dateStr: string) => {
-    return differenceInDays(parseISO(dateStr), calStart);
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return differenceInDays(new Date(y, m - 1, d), calStart);
   }, [calStart]);
 
   // Deadline positions mapped by column index
@@ -231,11 +234,12 @@ const TaskGantt: React.FC<Props> = ({ tasks, projectId, projectName, users, onTo
 
   // Resize task bar by extending/shrinking from edges
   const handleBarResize = useCallback(async (taskId: string, startDate: string | null, endDate: string | null, direction: 'start' | 'end') => {
+    const toLocalDate = (s: string) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
     if (direction === 'start' && startDate) {
-      const newStart = format(addDays(parseISO(startDate), -1), 'yyyy-MM-dd');
+      const newStart = format(addDays(toLocalDate(startDate), -1), 'yyyy-MM-dd');
       await updateDates.mutateAsync({ id: taskId, start_date: newStart, end_date: endDate });
     } else if (direction === 'end' && endDate) {
-      const newEnd = format(addDays(parseISO(endDate), 1), 'yyyy-MM-dd');
+      const newEnd = format(addDays(toLocalDate(endDate), 1), 'yyyy-MM-dd');
       await updateDates.mutateAsync({ id: taskId, start_date: startDate, end_date: newEnd });
     }
   }, [updateDates]);
@@ -308,37 +312,12 @@ const TaskGantt: React.FC<Props> = ({ tasks, projectId, projectName, users, onTo
           {/* Day headers */}
           <div className="flex border-b bg-muted/20">
             <div className="w-[200px] shrink-0 border-r" />
-            <div className="flex-1 flex relative">
+            <div className="flex-1 flex">
               {allDays.map((day, i) => (
                 <div key={i} className="text-[8px] text-center text-muted-foreground border-r py-0.5" style={{ width: `${(1 / totalDays) * 100}%` }}>
                   {format(day, 'd')}
                 </div>
               ))}
-              {/* Deadline markers in day header */}
-              {deadlinePositions.map((dl, idx) => {
-                const cat = getCategoryMeta(dl.category);
-                return (
-                  <Tooltip key={`dlh-${idx}`}>
-                    <TooltipTrigger asChild>
-                      <div
-                        className="absolute bottom-0 z-10 cursor-help"
-                        style={{
-                          left: `${((dl.col + 0.5) / totalDays) * 100}%`,
-                          transform: 'translateX(-50%)',
-                        }}
-                      >
-                        <div className="w-1.5 h-1.5 rounded-sm" style={{ backgroundColor: 'hsl(0 80% 55%)' }} />
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="max-w-[200px]">
-                      <div className="text-xs">
-                        <span className="font-medium">{dl.name}</span>
-                        <span className="text-muted-foreground ml-1">({cat.label} · {format(parseISO(dl.date), 'MMM d')})</span>
-                      </div>
-                    </TooltipContent>
-                  </Tooltip>
-                );
-              })}
             </div>
             <div className="w-[36px] shrink-0" />
           </div>

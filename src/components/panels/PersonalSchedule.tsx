@@ -687,14 +687,15 @@ const PersonalSchedule = () => {
             {/* Tasks for this week */}
             {(() => {
               // Show tasks for this user that overlap this week (based on start_date/end_date or week_start fallback)
-              const wsStart = parseISO(weekStartStr);
+              const toLocal = (s: string) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+              const wsStart = toLocal(weekStartStr);
               const wsEnd = endOfWeek(wsStart, { weekStartsOn: 1 });
               const weekTasks = allTasks?.filter(t => {
                 if (t.user_id !== currentUserId) return false;
                 // If task has start_date/end_date, check overlap with this week
                 if (t.start_date || t.end_date) {
-                  const tStart = t.start_date ? parseISO(t.start_date) : parseISO(t.end_date!);
-                  const tEnd = t.end_date ? parseISO(t.end_date) : tStart;
+                  const tStart = t.start_date ? toLocal(t.start_date) : toLocal(t.end_date!);
+                  const tEnd = t.end_date ? toLocal(t.end_date) : tStart;
                   return tStart <= wsEnd && tEnd >= wsStart;
                 }
                 // Fallback: match by week_start

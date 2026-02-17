@@ -1,73 +1,46 @@
-# Welcome to your Lovable project
+# Chief Project Manager
 
-## Project info
+A multi-disciplinary resource planning and time tracking web application for project managers.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Features
 
-## How can I edit this code?
+- **Multi-workspace** — Create and manage isolated project environments
+- **Discipline-based organization** — Group projects and team members by category (Architecture, Engineering, etc.)
+- **4-panel interface** — Sticker Wall, Discipline Overview, Personal Schedule, and Project Management
+- **Plan vs Record mode** — Track planned hours against actual time with automatic baseline sync
+- **Task management** — Per-project task lists with Gantt chart visualization
+- **Deadline tracking** — Categorized deadlines (due, milestone, review, presentation)
+- **Lightweight auth** — Simple name-based identity with per-user data isolation
 
-There are several ways of editing your application.
+## Quick Start
 
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
+```bash
+# Clone the repository
 git clone <YOUR_GIT_URL>
+cd chief-project-manager
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+# Install dependencies
+npm install
 
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Start the development server
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+The app will be available at `http://localhost:5173`.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Documentation
 
-**Use GitHub Codespaces**
+- [User Guide](docs/README_v1.0.0.md) — How to use the application
+- [Product Requirements](docs/PRD_v1.0.0.md) — Feature specifications and roadmap
+- [Architecture](docs/ARCHITECTURE_v1.0.0.md) — Technical overview with diagrams
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Tech Stack
 
-## What technologies are used for this project?
+- **Frontend:** React 18, TypeScript, Vite, Tailwind CSS, shadcn/ui
+- **State:** TanStack React Query
+- **Backend:** Supabase (PostgreSQL, Edge Functions)
+- **Charts:** Recharts
 
-This project is built with:
+## License
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+[MIT](LICENSE)

@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppContext, PanelType } from '@/contexts/AppContext';
 import { useUsers } from '@/hooks/useUsers';
-import { useWorkspaces } from '@/hooks/useWorkspaces';
+import { useWorkspaces, useUpdateWorkspace } from '@/hooks/useWorkspaces';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { LayoutDashboard, Calendar, FolderKanban, StickyNote, LogOut } from 'lucide-react';
 
@@ -19,7 +21,25 @@ const AppHeader = () => {
   const { activePanel, setActivePanel, mode, setMode, currentUserId, setCurrentUserId, workspaceId } = useAppContext();
   const { data: users } = useUsers();
   const { data: workspaces } = useWorkspaces();
+  const updateWorkspace = useUpdateWorkspace();
   const currentWorkspace = workspaces?.find(w => w.id === workspaceId);
+
+  const [editingName, setEditingName] = useState(false);
+  const [nameValue, setNameValue] = useState('');
+
+  const startEditing = () => {
+    if (currentWorkspace) {
+      setNameValue(currentWorkspace.name);
+      setEditingName(true);
+    }
+  };
+
+  const saveName = async () => {
+    if (nameValue.trim() && currentWorkspace && nameValue.trim() !== currentWorkspace.name) {
+      await updateWorkspace.mutateAsync({ id: currentWorkspace.id, name: nameValue.trim() });
+    }
+    setEditingName(false);
+  };
 
   return (
     <header className="flex items-center justify-between border-b bg-card px-4 py-2 gap-4">
@@ -29,9 +49,27 @@ const AppHeader = () => {
           <span className="hidden sm:inline">Exit</span>
         </Button>
         {currentWorkspace && (
-          <span className="text-sm font-medium text-muted-foreground border-l pl-2 ml-1">
-            {currentWorkspace.name}
-          </span>
+          editingName ? (
+            <Input
+              value={nameValue}
+              onChange={(e) => setNameValue(e.target.value)}
+              onBlur={saveName}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') saveName();
+                if (e.key === 'Escape') setEditingName(false);
+              }}
+              className="h-7 w-40 text-sm border-l ml-1"
+              autoFocus
+            />
+          ) : (
+            <span
+              className="text-sm font-medium text-muted-foreground border-l pl-2 ml-1 cursor-pointer hover:text-foreground"
+              onDoubleClick={startEditing}
+              title="Double-click to rename"
+            >
+              {currentWorkspace.name}
+            </span>
+          )
         )}
       </div>
 

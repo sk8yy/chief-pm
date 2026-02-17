@@ -5,15 +5,19 @@ export interface Workspace {
   id: string;
   name: string;
   created_at: string;
+  owner_id: string | null;
 }
 
-export function useWorkspaces() {
+export function useWorkspaces(profileId?: string | null) {
   return useQuery({
-    queryKey: ['workspaces'],
+    queryKey: ['workspaces', profileId],
     queryFn: async () => {
       const { data, error } = await supabase.from('workspaces').select('*').order('created_at');
       if (error) throw error;
-      return data as Workspace[];
+      const all = data as Workspace[];
+      if (!profileId) return all;
+      // Show user's own workspaces + any with no owner (shared/sample)
+      return all.filter(w => w.owner_id === profileId || w.owner_id === null);
     },
   });
 }
@@ -21,8 +25,10 @@ export function useWorkspaces() {
 export function useCreateWorkspace() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (name: string) => {
-      const { data, error } = await supabase.from('workspaces').insert({ name }).select().single();
+    mutationFn: async ({ name, ownerId }: { name: string; ownerId?: string | null }) => {
+      const insert: any = { name };
+      if (ownerId) insert.owner_id = ownerId;
+      const { data, error } = await supabase.from('workspaces').insert(insert).select().single();
       if (error) throw error;
       return data as Workspace;
     },

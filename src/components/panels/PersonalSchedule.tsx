@@ -5,9 +5,13 @@ import { useProjects } from '@/hooks/useProjects';
 import { useDisciplines } from '@/hooks/useDisciplines';
 import { useHours, useUpsertHours } from '@/hooks/useHours';
 import { useUserAssignments, useAssignMember } from '@/hooks/useAssignments';
+import { useAllDeadlines, useAddDeadline } from '@/hooks/useDeadlines';
 import { getDisciplineColor, getDisciplineColorRecord } from '@/lib/colors';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
+import { ChevronLeft, ChevronRight, Plus, Target } from 'lucide-react';
 import HourCell from './HourCell';
 import HourBlock, { BlockData } from './HourBlock';
 import TimeSummaryTable from './TimeSummaryTable';
@@ -59,6 +63,10 @@ const PersonalSchedule = () => {
   const { currentUserId, mode } = useAppContext();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [showAddProject, setShowAddProject] = useState(false);
+  const [showAddDeadline, setShowAddDeadline] = useState(false);
+  const [deadlineName, setDeadlineName] = useState('');
+  const [deadlineDate, setDeadlineDate] = useState('');
+  const [deadlineProjectId, setDeadlineProjectId] = useState('');
   const { data: projects } = useProjects();
   const { data: disciplines } = useDisciplines();
 
@@ -78,6 +86,32 @@ const PersonalSchedule = () => {
   const upsertHours = useUpsertHours();
   const { data: userAssignments } = useUserAssignments(currentUserId, dateRange);
   const assignMember = useAssignMember();
+  const { data: allDeadlines } = useAllDeadlines(dateRange);
+  const addDeadlineMut = useAddDeadline();
+
+  // Map deadlines by date string for quick lookup
+  const deadlinesByDate = useMemo(() => {
+    const map: Record<string, Array<{ name: string; projectName: string }>> = {};
+    allDeadlines?.forEach((d: any) => {
+      if (!map[d.date]) map[d.date] = [];
+      map[d.date].push({ name: d.name, projectName: d.projects?.name ?? 'Unknown' });
+    });
+    return map;
+  }, [allDeadlines]);
+
+  const handleAddDeadline = useCallback(() => {
+    if (!deadlineName.trim() || !deadlineDate || !deadlineProjectId || !currentUserId) return;
+    addDeadlineMut.mutate({
+      name: deadlineName.trim(),
+      date: deadlineDate,
+      project_id: deadlineProjectId,
+      created_by: currentUserId,
+    });
+    setDeadlineName('');
+    setDeadlineDate('');
+    setDeadlineProjectId('');
+    setShowAddDeadline(false);
+  }, [deadlineName, deadlineDate, deadlineProjectId, currentUserId, addDeadlineMut]);
 
   // Build set of assigned project IDs across all visible weeks
   const assignedProjectIds = useMemo(() => {
@@ -209,8 +243,9 @@ const PersonalSchedule = () => {
   }
 
   return (
+    <TooltipProvider>
     <div className="p-4 space-y-4">
-      {/* Month navigation + Add Project button */}
+      {/* Month navigation + Add Project + Add Deadline buttons */}
       <div className="flex items-center gap-3">
         <Button variant="outline" size="icon" onClick={() => setCurrentMonth((m) => subMonths(m, 1))}>
           <ChevronLeft className="h-4 w-4" />
@@ -221,10 +256,49 @@ const PersonalSchedule = () => {
         <Button variant="outline" size="icon" onClick={() => setCurrentMonth((m) => addMonths(m, 1))}>
           <ChevronRight className="h-4 w-4" />
         </Button>
-        <Button variant="outline" size="sm" className="ml-auto" onClick={() => setShowAddProject(true)}>
-          <Plus className="h-3.5 w-3.5 mr-1" /> Add Project
-        </Button>
+        <div className="ml-auto flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setShowAddDeadline(!showAddDeadline)}>
+            <Target className="h-3.5 w-3.5 mr-1" /> Add Deadline
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setShowAddProject(true)}>
+            <Plus className="h-3.5 w-3.5 mr-1" /> Add Project
+          </Button>
+        </div>
       </div>
+
+      {/* Add Deadline form */}
+      {showAddDeadline && (
+        <div className="flex items-center gap-2 p-3 border rounded-lg bg-card">
+          <Input
+            placeholder="Deadline name"
+            value={deadlineName}
+            onChange={(e) => setDeadlineName(e.target.value)}
+            className="h-8 text-xs flex-1 max-w-[200px]"
+          />
+          <Input
+            type="date"
+            value={deadlineDate}
+            onChange={(e) => setDeadlineDate(e.target.value)}
+            className="h-8 text-xs w-[140px]"
+          />
+          <Select value={deadlineProjectId} onValueChange={setDeadlineProjectId}>
+            <SelectTrigger className="h-8 text-xs w-[180px]">
+              <SelectValue placeholder="Select project" />
+            </SelectTrigger>
+            <SelectContent>
+              {projects?.map((p) => (
+                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button size="sm" className="h-8" onClick={handleAddDeadline} disabled={!deadlineName || !deadlineDate || !deadlineProjectId}>
+            Add
+          </Button>
+          <Button size="sm" variant="ghost" className="h-8" onClick={() => setShowAddDeadline(false)}>
+            Cancel
+          </Button>
+        </div>
+      )}
 
       {/* No projects message */}
       {groupedProjects.length === 0 && (
@@ -289,15 +363,36 @@ const PersonalSchedule = () => {
               <div className="px-2 py-1.5 border-r">
                 Week of {format(weekStart, 'MMM d')}
               </div>
-              {days.map((day) => (
-                <div
-                  key={day.toISOString()}
-                  className={`px-1 py-1.5 text-center border-r ${!isSameMonth(day, currentMonth) ? 'text-muted-foreground/50' : ''}`}
-                >
-                  <div>{DAYS[day.getDay() === 0 ? 6 : day.getDay() - 1]}</div>
-                  <div>{format(day, 'd')}</div>
-                </div>
-              ))}
+              {days.map((day) => {
+                const dateStr = format(day, 'yyyy-MM-dd');
+                const dayDeadlines = deadlinesByDate[dateStr];
+                return (
+                  <div
+                    key={day.toISOString()}
+                    className={`px-1 py-1.5 text-center border-r relative ${!isSameMonth(day, currentMonth) ? 'text-muted-foreground/50' : ''}`}
+                  >
+                    <div>{DAYS[day.getDay() === 0 ? 6 : day.getDay() - 1]}</div>
+                    <div className="flex items-center justify-center gap-0.5">
+                      {format(day, 'd')}
+                      {dayDeadlines && dayDeadlines.length > 0 && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="w-2 h-2 rounded-full bg-destructive inline-block shrink-0 cursor-help" />
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-[200px]">
+                            {dayDeadlines.map((dl, i) => (
+                              <div key={i} className="text-xs">
+                                <span className="font-medium">{dl.name}</span>
+                                <span className="text-muted-foreground ml-1">({dl.projectName})</span>
+                              </div>
+                            ))}
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
               <div className="px-1 py-1.5 text-center">Weekly Total</div>
             </div>
 
@@ -544,6 +639,7 @@ const PersonalSchedule = () => {
         />
       )}
     </div>
+    </TooltipProvider>
   );
 };
 

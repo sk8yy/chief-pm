@@ -114,21 +114,31 @@ const PersonalSchedule = () => {
   }, [deadlineName, deadlineDate, deadlineProjectId, currentUserId, addDeadlineMut]);
 
   // Build set of assigned project IDs across all visible weeks
+  // Include projects from both assignments AND hours data (hours may exist without assignments)
   const assignedProjectIds = useMemo(() => {
     const ids = new Set<string>();
     userAssignments?.forEach((a) => ids.add(a.project_id));
+    // Also include any project that has hours for this user
+    hours?.forEach((h) => ids.add(h.project_id));
     return ids;
-  }, [userAssignments]);
+  }, [userAssignments, hours]);
 
   // Per-week assignment map: weekStart -> Set<projectId>
+  // Derive from both assignments and hours data
   const weekAssignmentMap = useMemo(() => {
     const map: Record<string, Set<string>> = {};
     userAssignments?.forEach((a) => {
       if (!map[a.week_start]) map[a.week_start] = new Set();
       map[a.week_start].add(a.project_id);
     });
+    // Also derive from hours: if a user has hours on a project in a week, treat it as assigned
+    hours?.forEach((h) => {
+      const ws = format(startOfWeek(new Date(h.date + 'T00:00:00'), { weekStartsOn: 1 }), 'yyyy-MM-dd');
+      if (!map[ws]) map[ws] = new Set();
+      map[ws].add(h.project_id);
+    });
     return map;
-  }, [userAssignments]);
+  }, [userAssignments, hours]);
 
   // Drag state for creating new blocks
   const [dragState, setDragState] = useState<{

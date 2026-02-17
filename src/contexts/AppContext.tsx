@@ -14,6 +14,8 @@ interface AppContextType {
   setWorkspaceId: (id: string | null) => void;
   profileId: string | null;
   setProfileId: (id: string | null) => void;
+  isReadOnly: boolean;
+  setIsReadOnly: (v: boolean) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -24,6 +26,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [profileId, setProfileId] = useState<string | null>(null);
+  const [isReadOnly, setIsReadOnly] = useState(false);
 
   useEffect(() => {
     if (mode === 'record') {
@@ -34,7 +37,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [mode]);
 
   return (
-    <AppContext.Provider value={{ activePanel, setActivePanel, mode, setMode, currentUserId, setCurrentUserId, workspaceId, setWorkspaceId, profileId, setProfileId }}>
+    <AppContext.Provider value={{ activePanel, setActivePanel, mode, setMode, currentUserId, setCurrentUserId, workspaceId, setWorkspaceId, profileId, setProfileId, isReadOnly, setIsReadOnly }}>
       {children}
     </AppContext.Provider>
   );

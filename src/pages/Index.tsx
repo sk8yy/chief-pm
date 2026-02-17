@@ -1,10 +1,12 @@
 import { useAppContext } from '@/contexts/AppContext';
 import AppHeader from '@/components/AppHeader';
+import StickerWall from '@/components/panels/StickerWall';
 import DisciplineOverview from '@/components/panels/DisciplineOverview';
 import PersonalSchedule from '@/components/panels/PersonalSchedule';
 import ProjectManagement from '@/components/panels/ProjectManagement';
 
 const panelComponents = {
+  sticker: StickerWall,
   discipline: DisciplineOverview,
   personal: PersonalSchedule,
   project: ProjectManagement,

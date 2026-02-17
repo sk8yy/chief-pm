@@ -3,9 +3,10 @@ import { useUsers } from '@/hooks/useUsers';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { LayoutDashboard, Calendar, FolderKanban } from 'lucide-react';
+import { LayoutDashboard, Calendar, FolderKanban, StickyNote } from 'lucide-react';
 
 const panels: { key: PanelType; label: string; icon: React.ReactNode }[] = [
+  { key: 'sticker', label: 'Sticker Wall', icon: <StickyNote className="h-4 w-4" /> },
   { key: 'discipline', label: 'Discipline Overview', icon: <LayoutDashboard className="h-4 w-4" /> },
   { key: 'personal', label: 'Personal Schedule', icon: <Calendar className="h-4 w-4" /> },
   { key: 'project', label: 'Project Management', icon: <FolderKanban className="h-4 w-4" /> },
@@ -42,7 +43,7 @@ const AppHeader = () => {
           <span className={mode === 'record' ? 'font-semibold text-foreground' : 'text-muted-foreground'}>Record</span>
         </div>
 
-        {activePanel === 'personal' && (
+        {(activePanel === 'personal' || activePanel === 'sticker') && (
           <Select value={currentUserId ?? ''} onValueChange={setCurrentUserId}>
             <SelectTrigger className="w-[140px] h-8">
               <SelectValue placeholder="Select user" />

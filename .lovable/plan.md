@@ -1,125 +1,129 @@
 
 
-# Plan: Welcome Page and Multi-Workspace System
+# Plan: Fix Add Group visibility, Editable Workspace Name, Auth, Docs, and Pre-Publish
 
-## Overview
+## Summary
 
-Transform the app from a single-firm tool into a universal project management platform where each user can create and manage independent "workspaces" (previously hardcoded to your firm's disciplines). The existing data becomes a "Sample Project" workspace accessible from a welcome screen.
-
----
-
-## What You'll See
-
-1. **Welcome Page** - A landing page with large, colorful animated "Welcome to Chief Project Manager!" text
-2. **Two options**: "Create a project of your own" and "Open existing project" (which lists saved workspaces including "Sample Project")
-3. **Discipline Setup Page** - When creating new, users define their own categories (replacing "Discipline") with a "+" button and "Continue" to proceed
-4. **Exit Button** - Top-left of the working interface to return to the welcome page (auto-saves)
+This plan addresses all outstanding items before publishing to GitHub: fixing the "Add Group" button visibility concern, making the workspace name editable via double-click in the header, adding simple username-based authentication (no Google -- just a name input), generating documentation files (README, PRD, Architecture), and preparing the repository for open-source release.
 
 ---
 
-## Technical Details
+## 1. "Add Group" Button in Panel 1
 
-### 1. Database Changes
+The "Add Group" button already exists in the code (line 342 of DisciplineOverview.tsx) and is visible in the UI. It appears this may have been a browser cache issue on your end. No code changes needed here -- it is functional.
 
-Add a `workspaces` table and link all existing tables to it:
+## 2. Editable Workspace Name via Double-Click (AppHeader)
 
-```text
-workspaces
-  - id (uuid, PK)
-  - name (text) -- editable workspace name
-  - created_at (timestamptz)
+Currently the workspace name in the header (top-left, next to "Exit") is a static `<span>`. We will:
 
--- Add workspace_id to existing tables:
-  disciplines    + workspace_id (uuid, FK -> workspaces)
-  app_users      + workspace_id (uuid, FK -> workspaces)
-  projects       + workspace_id (uuid, FK -> workspaces)
-  hours          + workspace_id (uuid, FK -> workspaces)
-  tasks          + workspace_id (uuid, FK -> workspaces)
-  stickers       + workspace_id (uuid, FK -> workspaces)
-  deadlines      + workspace_id (uuid, FK -> workspaces)
-  assignments    + workspace_id (uuid, FK -> workspaces)
+- Add double-click handler on the workspace name text
+- On double-click, replace the `<span>` with an `<Input>` field pre-filled with the current name
+- Save on Enter or blur, cancel on Escape
+- Use the existing `useUpdateWorkspace` hook to persist the change
+
+**File:** `src/components/AppHeader.tsx`
+
+## 3. Simple Username-Based Auth (No Google)
+
+Instead of Google OAuth, we will implement a lightweight identity system where users simply enter a display name to "sign in." This keeps the app accessible without requiring email verification or OAuth setup.
+
+**Approach:**
+- Add a `profiles` table: `id (uuid PK)`, `display_name (text)`, `created_at`
+- On the Welcome Page, before showing the workspace options, check if a profile exists in `localStorage` (stored profile ID)
+- If no profile, show a simple "Enter your name to get started" input
+- Once entered, insert into `profiles` table, store the profile ID in localStorage
+- Add `owner_id` column to `workspaces` table referencing `profiles.id`
+- Filter workspaces by `owner_id` so each user only sees their own projects
+- The "Sample Project" workspace will have `owner_id = NULL` and be visible to everyone as a demo/template
+
+**Database migration:**
+```sql
+CREATE TABLE public.profiles (
+  id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
+  display_name TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow full access to profiles" ON public.profiles FOR ALL USING (true) WITH CHECK (true);
+
+ALTER TABLE public.workspaces ADD COLUMN owner_id UUID REFERENCES public.profiles(id);
 ```
 
-Migration will:
-- Create the `workspaces` table
-- Insert a "Sample Project" workspace
-- Add `workspace_id` column (nullable initially) to all 8 tables
-- Backfill all existing rows with the Sample Project workspace ID
-- Make `workspace_id` NOT NULL after backfill
+**New files:**
+- `src/hooks/useProfile.ts` -- manages profile creation/retrieval from localStorage + database
+- Update `src/contexts/AppContext.tsx` -- add `profileId` to context
 
-### 2. Color System Update
+**Modified files:**
+- `src/pages/WelcomePage.tsx` -- add name input gate before showing workspace options; filter workspaces by owner
+- `src/hooks/useWorkspaces.ts` -- include `owner_id` in creates, filter by profile
 
-Replace the hardcoded discipline-to-color mapping in `src/lib/colors.ts` with a dynamic system that:
-- Uses the `color` field already stored in the `disciplines` table
-- Derives bg/text/border/bgMuted/bgLight variants from the stored hex color by converting to HSL
-- Provides a preset palette of ~10 distinct hues for auto-assignment when creating new disciplines
+## 4. Documentation Files
 
-### 3. New Pages and Routing
+Generate three documentation files for the repository:
 
-| Route | Component | Purpose |
-|-------|-----------|---------|
-| `/` | `WelcomePage` | Landing with title animation and two action cards |
-| `/setup/:workspaceId` | `SetupDisciplines` | Define categories for a new workspace |
-| `/workspace/:workspaceId` | `WorkspaceView` | The current 4-panel interface |
+**`docs/README_v1.0.0.md`** -- Comprehensive usage guide covering:
+- What is Chief Project Manager
+- Getting started (welcome page flow)
+- Creating workspaces and disciplines
+- Using the 4 panels (Sticker Wall, Discipline Overview, Personal Schedule, Project Management)
+- Plan vs Record mode
+- Data management
 
-### 4. AppContext Changes
+**`docs/PRD_v1.0.0.md`** -- Product Requirements Document covering:
+- Product vision and goals
+- User personas
+- Feature specifications for each panel
+- Data model overview
+- Future roadmap
 
-- Add `workspaceId` to context so all hooks can filter queries by workspace
-- All existing hooks (`useProjects`, `useDisciplines`, `useUsers`, `useHours`, etc.) will add `.eq('workspace_id', workspaceId)` to their queries
+**`docs/ARCHITECTURE_v1.0.0.md`** -- Technical architecture document with:
+- Technology stack overview
+- Component hierarchy (Mermaid diagram)
+- Data flow between panels
+- Database schema (Mermaid ER diagram)
+- Hook and context patterns
 
-### 5. New Components
+## 5. Update Root README.md
 
-**WelcomePage** (`src/pages/WelcomePage.tsx`)
-- Large gradient-animated "Welcome to Chief Project Manager!" heading
-- Two cards side by side:
-  - "Create a project of your own" -- navigates to `/setup/:newWorkspaceId`
-  - "Open existing project" -- shows list of saved workspaces (including "Sample Project") as clickable cards with editable names
+Replace the default Lovable README with a proper project README covering:
+- Project description and features
+- Screenshots placeholder
+- Quick start instructions
+- Link to detailed docs in `/docs`
+- License (MIT)
 
-**SetupDisciplines** (`src/pages/SetupDisciplines.tsx`)
-- Heading: "Define your Disciplines / Groups / Project Categories..."
-- List of added categories with auto-assigned colors (colored pills)
-- "+" button to add a new category (text input)
-- "Continue" button that inserts disciplines to DB and navigates to `/workspace/:id`
+## 6. Add LICENSE File
 
-**AppHeader Update**
-- Add an Exit button (door/arrow icon) on the top-left that navigates back to `/`
-- Current workspace name displayed next to it
+Add an MIT LICENSE file at the repository root.
 
-### 6. File Changes Summary
+## 7. Compact Sample Data
 
-| File | Change |
+The existing "Sample Project: Urban Planning Firm" workspace already has all your data preserved in the database. No additional compaction is needed -- it is already scoped by `workspace_id`.
+
+---
+
+## Technical File Changes Summary
+
+| File | Action |
 |------|--------|
-| `src/App.tsx` | Add routes for `/`, `/setup/:id`, `/workspace/:id` |
-| `src/pages/WelcomePage.tsx` | New - welcome landing page |
-| `src/pages/SetupDisciplines.tsx` | New - discipline/category creation flow |
-| `src/pages/WorkspaceView.tsx` | New - wraps current Index.tsx content with workspace context |
-| `src/contexts/AppContext.tsx` | Add `workspaceId` to context, read from route params |
-| `src/lib/colors.ts` | Replace hardcoded map with dynamic HSL derivation from DB color field |
-| `src/hooks/useWorkspaces.ts` | New - CRUD for workspaces table |
-| `src/hooks/useDisciplines.ts` | Filter by `workspace_id` |
-| `src/hooks/useUsers.ts` | Filter by `workspace_id` |
-| `src/hooks/useProjects.ts` | Filter by `workspace_id` |
-| `src/hooks/useHours.ts` | Filter by `workspace_id` |
-| `src/hooks/useTasks.ts` | Filter by `workspace_id` |
-| `src/hooks/useStickers.ts` | Filter by `workspace_id` |
-| `src/hooks/useAssignments.ts` | Filter by `workspace_id` |
-| `src/hooks/useDeadlines.ts` | Filter by `workspace_id` |
-| `src/hooks/useAllHours.ts` | Filter by `workspace_id` |
-| `src/components/AppHeader.tsx` | Add Exit button, show workspace name |
-| `src/pages/Index.tsx` | Redirect to `/` (welcome page) |
+| `src/components/AppHeader.tsx` | Add double-click editing for workspace name |
+| `src/contexts/AppContext.tsx` | Add `profileId` to context |
+| `src/hooks/useProfile.ts` | New -- profile CRUD with localStorage |
+| `src/hooks/useWorkspaces.ts` | Filter by `owner_id`, include in creates |
+| `src/pages/WelcomePage.tsx` | Add name input gate, filter workspaces |
+| `docs/README_v1.0.0.md` | New -- usage guide |
+| `docs/PRD_v1.0.0.md` | New -- product requirements |
+| `docs/ARCHITECTURE_v1.0.0.md` | New -- architecture docs |
+| `README.md` | Rewrite for open-source |
+| `LICENSE` | New -- MIT license |
+| Database migration | Add `profiles` table, `owner_id` to workspaces |
 
-### 7. Auto-Save
+## Implementation Order
 
-The existing auto-save/debounce behavior already persists all changes. Clicking "Exit" simply navigates back -- no explicit save action needed since all mutations are already instant.
-
-### 8. Color Palette for New Disciplines
-
-A preset rotation of 10 visually distinct hues will be used for auto-assigning colors:
-
-```text
-Green (122), Coral (14), Orange (36), Purple (262), Blue (207),
-Teal (174), Rose (340), Amber (45), Indigo (230), Lime (85)
-```
-
-Each new discipline gets the next unused hue in the rotation.
+1. Database migration (profiles table + owner_id)
+2. Profile hook and context updates
+3. Welcome page name gate and workspace filtering
+4. AppHeader workspace name double-click editing
+5. Documentation files (README, PRD, Architecture)
+6. LICENSE file
 

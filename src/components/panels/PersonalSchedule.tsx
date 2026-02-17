@@ -191,7 +191,7 @@ const PersonalSchedule = () => {
 
             {/* Daily Normal Hours row */}
             <div className="grid grid-cols-[180px_repeat(7,1fr)_80px] text-xs font-semibold bg-muted/30 border-t">
-              <div className="px-2 py-1 border-r">Daily Normal Hours</div>
+              <div className="px-2 py-1 border-r">Normal Hours</div>
               {days.map((day) => {
                 const dateStr = format(day, 'yyyy-MM-dd');
                 let dayTotal = 0;
@@ -216,7 +216,7 @@ const PersonalSchedule = () => {
 
             {/* Daily OT Hours row */}
             <div className="grid grid-cols-[180px_repeat(7,1fr)_80px] text-xs font-semibold bg-muted/30 border-t">
-              <div className="px-2 py-1 border-r">Daily OT Hours</div>
+              <div className="px-2 py-1 border-r">OT Hours</div>
               {days.map((day) => {
                 const dateStr = format(day, 'yyyy-MM-dd');
                 let dayTotal = 0;

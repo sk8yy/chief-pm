@@ -8,12 +8,13 @@ interface HourCellProps {
   color: string;
   dimmed: boolean;
   onChange: (v: number) => void;
-  isDragHighlighted?: boolean;
+  coveredByBlock?: boolean;
   onDragStart?: () => void;
   onDragEnter?: () => void;
+  isDragHighlighted?: boolean;
 }
 
-const HourCell = ({ value, plannedValue, mode, color, dimmed, onChange, isDragHighlighted, onDragStart, onDragEnter }: HourCellProps) => {
+const HourCell = ({ value, plannedValue, mode, color, dimmed, onChange, coveredByBlock, onDragStart, onDragEnter, isDragHighlighted }: HourCellProps) => {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -31,6 +32,16 @@ const HourCell = ({ value, plannedValue, mode, color, dimmed, onChange, isDragHi
   };
 
   const diff = mode === 'record' && plannedValue > 0 ? value - plannedValue : null;
+
+  // If covered by a block, render an empty transparent cell (block overlay handles display)
+  if (coveredByBlock) {
+    return (
+      <div
+        className={`border-r min-h-[32px] ${dimmed ? 'opacity-40' : ''}`}
+        onMouseEnter={() => onDragEnter?.()}
+      />
+    );
+  }
 
   return (
     <div

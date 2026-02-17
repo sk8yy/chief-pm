@@ -120,21 +120,23 @@ const StickerWall: React.FC = () => {
 
       {/* creating state */}
       {isCreating ? (
-        <div className="border rounded-lg p-4 bg-card space-y-3 max-w-lg">
-          <Textarea
-            autoFocus
-            placeholder="Type your note here..."
-            value={newContent}
-            onChange={(e) => setNewContent(e.target.value)}
-            className="min-h-[120px]"
-          />
-          <div className="flex gap-2">
-            <Button size="sm" onClick={handleCreate} disabled={!newContent.trim() || createSticker.isPending}>
-              Add
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => { setIsCreating(false); setNewContent(''); }}>
-              <ArrowLeft className="h-3.5 w-3.5 mr-1" /> Cancel
-            </Button>
+        <div className="flex justify-center">
+          <div className="border rounded-lg p-6 bg-card space-y-4 w-full max-w-2xl">
+            <Textarea
+              autoFocus
+              placeholder="Type your note here..."
+              value={newContent}
+              onChange={(e) => setNewContent(e.target.value)}
+              className="min-h-[200px] text-base"
+            />
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => { setIsCreating(false); setNewContent(''); }}>
+                <ArrowLeft className="h-3.5 w-3.5 mr-1" /> Cancel
+              </Button>
+              <Button onClick={handleCreate} disabled={!newContent.trim() || createSticker.isPending}>
+                <Plus className="h-4 w-4 mr-1" /> Add
+              </Button>
+            </div>
           </div>
         </div>
       ) : (

@@ -199,10 +199,17 @@ const StickerWall: React.FC = () => {
         }
       }
 
-      // Insert tasks
+      // Insert tasks – deduplicate by description+project (multi-person tasks create one row per unique user)
       if (tasks.length > 0) {
+        const seen = new Set<string>();
         const rows = tasks
           .filter(t => t.description && t.project_id)
+          .filter(t => {
+            const key = `${t.description.toLowerCase().trim()}_${t.project_id}_${t.user_id || effectiveUserId}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          })
           .map(t => ({
             description: t.description,
             project_id: t.project_id!,

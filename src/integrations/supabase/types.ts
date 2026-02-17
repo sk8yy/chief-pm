@@ -280,28 +280,34 @@ export type Database = {
       tasks: {
         Row: {
           description: string
+          end_date: string | null
           id: string
           is_completed: boolean
           is_planned: boolean
           project_id: string
+          start_date: string | null
           user_id: string
           week_start: string
         }
         Insert: {
           description: string
+          end_date?: string | null
           id?: string
           is_completed?: boolean
           is_planned?: boolean
           project_id: string
+          start_date?: string | null
           user_id: string
           week_start: string
         }
         Update: {
           description?: string
+          end_date?: string | null
           id?: string
           is_completed?: boolean
           is_planned?: boolean
           project_id?: string
+          start_date?: string | null
           user_id?: string
           week_start?: string
         }

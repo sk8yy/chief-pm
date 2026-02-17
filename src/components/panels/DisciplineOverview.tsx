@@ -128,7 +128,7 @@ const DisciplineOverview = () => {
       const discUsers = users.filter((u) => u.discipline_id === d.id);
       const discProjects = projects.filter((p) => p.discipline_id === d.id);
       return { discipline: d, users: discUsers, projects: discProjects };
-    }).filter((g) => g.users.length > 0 || g.projects.length > 0);
+    });
   }, [disciplines, users, projects]);
 
   // Project weekly hours (all users combined)

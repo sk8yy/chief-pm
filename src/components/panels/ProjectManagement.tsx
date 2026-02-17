@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
+import { Trash2 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addMonths, subMonths, eachWeekOfInterval, eachDayOfInterval } from 'date-fns';
 import { useAppContext } from '@/contexts/AppContext';
 import { useProjects, useUpdateProject } from '@/hooks/useProjects';
@@ -221,7 +222,20 @@ const ProjectManagement = () => {
   };
 
   if (!projects?.length) {
-    return <div className="p-8 text-center text-muted-foreground">No projects found.</div>;
+    return (
+      <div className="p-8 text-center space-y-4">
+        <p className="text-muted-foreground">No projects found.</p>
+        <Button variant="outline" size="sm" onClick={() => setCreateDialogOpen(true)}>
+          <Plus className="h-3.5 w-3.5 mr-1" /> New Project
+        </Button>
+        <CreateProjectDialog
+          open={createDialogOpen}
+          onClose={() => setCreateDialogOpen(false)}
+          disciplines={disciplines ?? []}
+          users={users ?? []}
+        />
+      </div>
+    );
   }
 
   return (
@@ -249,6 +263,23 @@ const ProjectManagement = () => {
         <Button variant="outline" size="sm" onClick={() => setCreateDialogOpen(true)}>
           <Plus className="h-3.5 w-3.5 mr-1" /> New Project
         </Button>
+
+        {selectedProject && (
+          <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={async () => {
+            if (!confirm('Delete this project and all its data?')) return;
+            await supabase.from('tasks').delete().eq('project_id', selectedProjectId);
+            await supabase.from('hours').delete().eq('project_id', selectedProjectId);
+            await supabase.from('assignments').delete().eq('project_id', selectedProjectId);
+            await supabase.from('deadlines').delete().eq('project_id', selectedProjectId);
+            await supabase.from('stickers').update({ project_id: null }).eq('project_id', selectedProjectId);
+            await supabase.from('projects').delete().eq('id', selectedProjectId);
+            setSelectedProjectId('');
+            qc.invalidateQueries({ queryKey: ['projects'] });
+            qc.invalidateQueries({ queryKey: ['all_hours'] });
+          }}>
+            <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete Project
+          </Button>
+        )}
 
         <div className="flex items-center gap-2 ml-auto">
           <Button variant="outline" size="icon" onClick={() => setCurrentMonth((m) => subMonths(m, 1))}>

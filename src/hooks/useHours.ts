@@ -36,7 +36,7 @@ export function useUpsertHours() {
     }) => {
       const { data: existing } = await supabase
         .from('hours')
-        .select('id')
+        .select('id, planned_hours, recorded_hours')
         .eq('user_id', params.user_id)
         .eq('project_id', params.project_id)
         .eq('date', params.date)
@@ -44,17 +44,25 @@ export function useUpsertHours() {
 
       if (existing) {
         const updateData: Record<string, unknown> = {};
-        if (params.planned_hours !== undefined) updateData.planned_hours = params.planned_hours;
+        if (params.planned_hours !== undefined) {
+          updateData.planned_hours = params.planned_hours;
+          // Auto-copy to recorded if recorded is still null (first-time sync)
+          if (existing.recorded_hours === null) {
+            updateData.recorded_hours = params.planned_hours;
+          }
+        }
         if (params.recorded_hours !== undefined) updateData.recorded_hours = params.recorded_hours;
         const { error } = await supabase.from('hours').update(updateData).eq('id', existing.id);
         if (error) throw error;
       } else {
+        const plannedVal = params.planned_hours ?? 0;
         const { error } = await supabase.from('hours').insert({
           user_id: params.user_id,
           project_id: params.project_id,
           date: params.date,
-          planned_hours: params.planned_hours ?? 0,
-          recorded_hours: params.recorded_hours ?? null,
+          planned_hours: plannedVal,
+          // Auto-copy planned to recorded on initial insert
+          recorded_hours: params.recorded_hours !== undefined ? params.recorded_hours : (plannedVal > 0 ? plannedVal : null),
           workspace_id: workspaceId!,
         } as any);
         if (error) throw error;

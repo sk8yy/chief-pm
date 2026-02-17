@@ -6,10 +6,10 @@ import { useDisciplines } from '@/hooks/useDisciplines';
 import { useUsers } from '@/hooks/useUsers';
 import { useAllHours } from '@/hooks/useAllHours';
 import { useAllAssignments, useAssignMember, useUnassignMember } from '@/hooks/useAssignments';
-import { useAllDeadlines } from '@/hooks/useDeadlines';
+import { useAllDeadlines, useAddDeadline } from '@/hooks/useDeadlines';
+import { DEADLINE_CATEGORIES, autoCategorize, getCategoryMeta, DeadlineCategory } from '@/lib/deadlineCategories';
 import { useAllTasks, useToggleTask } from '@/hooks/useTasks';
 import { getDisciplineColor, getDisciplineColorRecord } from '@/lib/colors';
-import { getCategoryMeta } from '@/lib/deadlineCategories';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Plus, Trash2, Users, FolderKanban, Pencil, X, Check, ClipboardPaste } from 'lucide-react';
@@ -50,6 +50,12 @@ const DisciplineOverview = () => {
   const [addDialogTarget, setAddDialogTarget] = useState<{ projectId: string; weekStart: Date; anchorEl: HTMLElement | null } | null>(null);
   // Hover state for week cells
   const [hoveredCell, setHoveredCell] = useState<string | null>(null);
+  // Add deadline state
+  const [showAddDeadline, setShowAddDeadline] = useState(false);
+  const [deadlineName, setDeadlineName] = useState('');
+  const [deadlineDate, setDeadlineDate] = useState('');
+  const [deadlineProjectId, setDeadlineProjectId] = useState('');
+  const [deadlineCategory, setDeadlineCategory] = useState<DeadlineCategory>('due');
   const { data: projects } = useProjects();
   const { data: disciplines } = useDisciplines();
   const { data: users } = useUsers();
@@ -73,6 +79,7 @@ const DisciplineOverview = () => {
   const toggleTask = useToggleTask();
   const assignMemberMut = useAssignMember();
   const unassignMemberMut = useUnassignMember();
+  const addDeadlineMut = useAddDeadline();
 
   // Map deadlines by date AND by project for precise placement
   const deadlinesByDate = useMemo(() => {
@@ -281,6 +288,22 @@ const DisciplineOverview = () => {
     });
     return stickers;
   }, [users, hoursMap, mode]);
+  const handleAddDeadline = useCallback(() => {
+    if (!deadlineName.trim() || !deadlineDate || !deadlineProjectId || !users?.length) return;
+    addDeadlineMut.mutate({
+      name: deadlineName.trim(),
+      date: deadlineDate,
+      project_id: deadlineProjectId,
+      created_by: users[0].id,
+      category: deadlineCategory,
+    });
+    setDeadlineName('');
+    setDeadlineDate('');
+    setDeadlineProjectId('');
+    setDeadlineCategory('due');
+    setShowAddDeadline(false);
+  }, [deadlineName, deadlineDate, deadlineProjectId, deadlineCategory, users, addDeadlineMut]);
+
   return (
     <TooltipProvider>
     <div className="p-4 space-y-4">
@@ -298,7 +321,59 @@ const DisciplineOverview = () => {
         <span className="text-xs text-muted-foreground ml-2">
           {mode === 'plan' ? 'Planned hours' : 'Recorded hours'}
         </span>
+        <div className="ml-auto">
+          <Button variant="outline" size="sm" onClick={() => setShowAddDeadline(!showAddDeadline)}>
+            <Plus className="h-3.5 w-3.5 mr-1" /> Add Deadline
+          </Button>
+        </div>
       </div>
+
+      {/* Add Deadline form */}
+      {showAddDeadline && (
+        <div className="flex items-center gap-2 p-3 border rounded-lg bg-card">
+          <Input
+            placeholder="Deadline name"
+            value={deadlineName}
+            onChange={(e) => {
+              setDeadlineName(e.target.value);
+              setDeadlineCategory(autoCategorize(e.target.value));
+            }}
+            className="h-8 text-xs flex-1 max-w-[200px]"
+          />
+          <Input
+            type="date"
+            value={deadlineDate}
+            onChange={(e) => setDeadlineDate(e.target.value)}
+            className="h-8 text-xs w-[140px]"
+          />
+          <Select value={deadlineProjectId} onValueChange={setDeadlineProjectId}>
+            <SelectTrigger className="h-8 text-xs w-[180px]">
+              <SelectValue placeholder="Select project" />
+            </SelectTrigger>
+            <SelectContent>
+              {projects?.map((p) => (
+                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={deadlineCategory} onValueChange={(v) => setDeadlineCategory(v as DeadlineCategory)}>
+            <SelectTrigger className="h-8 text-xs w-[150px]">
+              <SelectValue placeholder="Category" />
+            </SelectTrigger>
+            <SelectContent>
+              {DEADLINE_CATEGORIES.map(c => (
+                <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button size="sm" className="h-8" onClick={handleAddDeadline} disabled={!deadlineName || !deadlineDate || !deadlineProjectId}>
+            Add
+          </Button>
+          <Button size="sm" variant="ghost" className="h-8" onClick={() => setShowAddDeadline(false)}>
+            Cancel
+          </Button>
+        </div>
+      )}
 
       {/* Discipline cards */}
       {disciplineGroups.map((group) => {

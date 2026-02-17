@@ -139,30 +139,32 @@ const HourBlock = ({
 
             {/* Left resize handle */}
             {onResize && !inlineEditing && (
-              <button
+              <div
                 className="absolute left-0 top-0 bottom-0 w-4 flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-ew-resize z-20 hover:bg-black/10 rounded-l-md transition-opacity"
-                onClick={(e) => {
+                onMouseDown={(e) => {
                   e.stopPropagation();
+                  e.preventDefault();
                   onResize('start');
                 }}
                 title="Extend left"
               >
                 <ChevronLeft className="w-3 h-3" />
-              </button>
+              </div>
             )}
 
             {/* Right resize handle */}
             {onResize && !inlineEditing && (
-              <button
+              <div
                 className="absolute right-0 top-0 bottom-0 w-4 flex items-center justify-center opacity-0 group-hover:opacity-100 cursor-ew-resize z-20 hover:bg-black/10 rounded-r-md transition-opacity"
-                onClick={(e) => {
+                onMouseDown={(e) => {
                   e.stopPropagation();
+                  e.preventDefault();
                   onResize('end');
                 }}
                 title="Extend right"
               >
                 <ChevronRight className="w-3 h-3" />
-              </button>
+              </div>
             )}
 
             {inlineEditing ? (

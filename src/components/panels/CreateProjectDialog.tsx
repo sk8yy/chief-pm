@@ -34,7 +34,7 @@ interface CreateProjectDialogProps {
 }
 
 const CreateProjectDialog = ({ open, onClose, disciplines, users, defaultDisciplineId, onCreated }: CreateProjectDialogProps) => {
-  const { workspaceId } = useAppContext();
+  const { workspaceId, isSandbox } = useAppContext();
   const [name, setName] = useState('');
   const [jobNumber, setJobNumber] = useState('');
   const [disciplineId, setDisciplineId] = useState<string>(defaultDisciplineId ?? '');
@@ -72,6 +72,7 @@ const CreateProjectDialog = ({ open, onClose, disciplines, users, defaultDiscipl
 
   const handleCreate = async () => {
     if (!name.trim() || isSubmitting) return;
+    if (isSandbox) { const { sandboxToast } = await import('@/lib/sandbox'); sandboxToast(); onClose(); return; }
     setIsSubmitting(true);
 
     try {

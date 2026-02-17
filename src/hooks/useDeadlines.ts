@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/contexts/AppContext';
+import { sandboxToast } from '@/lib/sandbox';
 
 export function useProjectDeadlines(projectId: string | undefined) {
   const { workspaceId } = useAppContext();
@@ -42,9 +43,10 @@ export function useAllDeadlines(dateRange: { start: string; end: string }) {
 
 export function useAddDeadline() {
   const qc = useQueryClient();
-  const { workspaceId } = useAppContext();
+  const { workspaceId, isSandbox } = useAppContext();
   return useMutation({
     mutationFn: async (params: { name: string; date: string; project_id: string; created_by: string; category?: string }) => {
+      if (isSandbox) { sandboxToast(); return; }
       const { error } = await supabase.from('deadlines').insert({
         name: params.name,
         date: params.date,
@@ -56,28 +58,32 @@ export function useAddDeadline() {
       } as any);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['deadlines'] }),
+    onSuccess: () => { if (!isSandbox) qc.invalidateQueries({ queryKey: ['deadlines'] }); },
   });
 }
 
 export function useDeleteDeadline() {
   const qc = useQueryClient();
+  const { isSandbox } = useAppContext();
   return useMutation({
     mutationFn: async (id: string) => {
+      if (isSandbox) { sandboxToast(); return; }
       const { error } = await supabase.from('deadlines').delete().eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['deadlines'] }),
+    onSuccess: () => { if (!isSandbox) qc.invalidateQueries({ queryKey: ['deadlines'] }); },
   });
 }
 
 export function useUpdateDeadlineCategory() {
   const qc = useQueryClient();
+  const { isSandbox } = useAppContext();
   return useMutation({
     mutationFn: async ({ id, category }: { id: string; category: string }) => {
+      if (isSandbox) { sandboxToast(); return; }
       const { error } = await supabase.from('deadlines').update({ category } as any).eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['deadlines'] }),
+    onSuccess: () => { if (!isSandbox) qc.invalidateQueries({ queryKey: ['deadlines'] }); },
   });
 }

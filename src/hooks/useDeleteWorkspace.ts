@@ -1,11 +1,14 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAppContext } from '@/contexts/AppContext';
+import { sandboxToast } from '@/lib/sandbox';
 
 export function useDeleteWorkspace() {
   const qc = useQueryClient();
+  const { isSandbox } = useAppContext();
   return useMutation({
     mutationFn: async (id: string) => {
-      // Delete all related data first (order matters for FK constraints)
+      if (isSandbox) { sandboxToast(); return; }
       await supabase.from('tasks').delete().eq('workspace_id', id);
       await supabase.from('stickers').delete().eq('workspace_id', id);
       await supabase.from('deadlines').delete().eq('workspace_id', id);
@@ -17,6 +20,6 @@ export function useDeleteWorkspace() {
       const { error } = await supabase.from('workspaces').delete().eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['workspaces'] }),
+    onSuccess: () => { if (!isSandbox) qc.invalidateQueries({ queryKey: ['workspaces'] }); },
   });
 }

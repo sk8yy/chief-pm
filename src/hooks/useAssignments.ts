@@ -1,8 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/contexts/AppContext';
+import { sandboxToast } from '@/lib/sandbox';
 
-/** Fetch assignments for a specific user across a date range of weeks */
 export function useUserAssignments(userId: string | null, dateRange: { start: string; end: string }) {
   const { workspaceId } = useAppContext();
   return useQuery({
@@ -24,7 +24,6 @@ export function useUserAssignments(userId: string | null, dateRange: { start: st
   });
 }
 
-/** Fetch all assignments for a project across a date range */
 export function useProjectAssignments(projectId: string | undefined, dateRange: { start: string; end: string }) {
   const { workspaceId } = useAppContext();
   return useQuery({
@@ -46,7 +45,6 @@ export function useProjectAssignments(projectId: string | undefined, dateRange: 
   });
 }
 
-/** Fetch all assignments across all users/projects for a date range */
 export function useAllAssignments(dateRange: { start: string; end: string }) {
   const { workspaceId } = useAppContext();
   return useQuery({
@@ -65,12 +63,12 @@ export function useAllAssignments(dateRange: { start: string; end: string }) {
   });
 }
 
-/** Assign a user to a project for specific weeks */
 export function useAssignMember() {
   const qc = useQueryClient();
-  const { workspaceId } = useAppContext();
+  const { workspaceId, isSandbox } = useAppContext();
   return useMutation({
     mutationFn: async (params: { user_id: string; project_id: string; week_starts: string[] }) => {
+      if (isSandbox) { sandboxToast(); return; }
       const rows = params.week_starts.map((ws) => ({
         user_id: params.user_id,
         project_id: params.project_id,
@@ -83,17 +81,16 @@ export function useAssignMember() {
       });
       if (error) throw error;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['assignments'] });
-    },
+    onSuccess: () => { if (!isSandbox) qc.invalidateQueries({ queryKey: ['assignments'] }); },
   });
 }
 
-/** Unassign a user from a project for specific weeks */
 export function useUnassignMember() {
   const qc = useQueryClient();
+  const { isSandbox } = useAppContext();
   return useMutation({
     mutationFn: async (params: { user_id: string; project_id: string; week_starts: string[] }) => {
+      if (isSandbox) { sandboxToast(); return; }
       for (const ws of params.week_starts) {
         const { error } = await supabase
           .from('assignments')
@@ -104,8 +101,6 @@ export function useUnassignMember() {
         if (error) throw error;
       }
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['assignments'] });
-    },
+    onSuccess: () => { if (!isSandbox) qc.invalidateQueries({ queryKey: ['assignments'] }); },
   });
 }

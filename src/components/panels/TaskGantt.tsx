@@ -52,7 +52,7 @@ interface Props {
 }
 
 const TaskGantt: React.FC<Props> = ({ tasks, projectId, projectName, users, onToggle, deadlines }) => {
-  const { workspaceId } = useAppContext();
+  const { workspaceId, isSandbox } = useAppContext();
   const createTask = useCreateTask();
   const deleteTask = useDeleteTask();
   const updateDates = useUpdateTaskDates();
@@ -149,6 +149,7 @@ const TaskGantt: React.FC<Props> = ({ tasks, projectId, projectName, users, onTo
 
   // Auto-create sticker when tasks are added from Panel 3
   const autoCreateSticker = useCallback(async (description: string) => {
+    if (isSandbox) return;
     const today = format(new Date(), 'yyyy-MM-dd');
     const stickerTitle = `${projectName} _New Tasks _${today}`;
 
@@ -253,7 +254,7 @@ const TaskGantt: React.FC<Props> = ({ tasks, projectId, projectName, users, onTo
 
   // Update task description
   const handleDescriptionUpdate = useCallback(async (taskId: string, newDescription: string) => {
-    if (!newDescription.trim()) return;
+    if (!newDescription.trim() || isSandbox) return;
     // Update all tasks in the group (same description)
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;

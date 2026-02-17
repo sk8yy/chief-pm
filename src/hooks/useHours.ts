@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/contexts/AppContext';
+import { sandboxToast } from '@/lib/sandbox';
 
 export function useHours(userId: string | null, dateRange: { start: string; end: string }) {
   const { workspaceId } = useAppContext();
@@ -25,7 +26,7 @@ export function useHours(userId: string | null, dateRange: { start: string; end:
 
 export function useUpsertHours() {
   const qc = useQueryClient();
-  const { workspaceId } = useAppContext();
+  const { workspaceId, isSandbox } = useAppContext();
   return useMutation({
     mutationFn: async (params: {
       user_id: string;
@@ -34,6 +35,7 @@ export function useUpsertHours() {
       planned_hours?: number;
       recorded_hours?: number | null;
     }) => {
+      if (isSandbox) { sandboxToast(); return; }
       const { data: existing } = await supabase
         .from('hours')
         .select('id, planned_hours, recorded_hours')
@@ -46,7 +48,6 @@ export function useUpsertHours() {
         const updateData: Record<string, unknown> = {};
         if (params.planned_hours !== undefined) {
           updateData.planned_hours = params.planned_hours;
-          // Auto-copy to recorded if recorded is still null (first-time sync)
           if (existing.recorded_hours === null) {
             updateData.recorded_hours = params.planned_hours;
           }
@@ -61,7 +62,6 @@ export function useUpsertHours() {
           project_id: params.project_id,
           date: params.date,
           planned_hours: plannedVal,
-          // Auto-copy planned to recorded on initial insert
           recorded_hours: params.recorded_hours !== undefined ? params.recorded_hours : (plannedVal > 0 ? plannedVal : null),
           workspace_id: workspaceId!,
         } as any);
@@ -69,7 +69,7 @@ export function useUpsertHours() {
       }
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['hours'] });
+      if (!isSandbox) qc.invalidateQueries({ queryKey: ['hours'] });
     },
   });
 }

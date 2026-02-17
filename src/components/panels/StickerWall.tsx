@@ -51,7 +51,8 @@ type MatchResult = {
 
 /* ───────── component ───────── */
 const StickerWall: React.FC = () => {
-  const { currentUserId, workspaceId } = useAppContext();
+  const { currentUserId, workspaceId, isSandbox } = useAppContext();
+  const sandboxGuard = () => { if (isSandbox) { toast.info('🧪 Sandbox — changes are preview-only', { id: 'sandbox' }); return true; } return false; };
 
   /* data */
   const [showAll, setShowAll] = useState(false);
@@ -234,6 +235,7 @@ const StickerWall: React.FC = () => {
 
   /* ── save extracted items ── */
   const handleConfirmExtraction = async (deadlines: ExtractedDeadline[], tasks: ExtractedTask[]) => {
+    if (sandboxGuard()) { setShowExtraction(false); exitSelectMode(); return; }
     const effectiveUserId = currentUserId || users?.[0]?.id;
     if (!effectiveUserId) {
       toast.error('No users available.');
@@ -357,6 +359,7 @@ const StickerWall: React.FC = () => {
 
   const handleCreate = async () => {
     if (!currentUserId || !newContent.trim()) return;
+    if (sandboxGuard()) return;
     const result = await createSticker.mutateAsync({ content: newContent.trim(), user_id: currentUserId });
     const content = newContent.trim();
     setNewContent('');
@@ -366,6 +369,7 @@ const StickerWall: React.FC = () => {
 
   const handleAcceptMatch = async () => {
     if (!matchStickerId || !matchResult?.matched_project_id) return;
+    if (sandboxGuard()) return;
     await updateSticker.mutateAsync({ id: matchStickerId, project_id: matchResult.matched_project_id });
     toast.success('Sticker linked to project!');
     setMatchResult(null);
@@ -376,12 +380,14 @@ const StickerWall: React.FC = () => {
 
   const handleSaveEdit = async () => {
     if (!editingSticker) return;
+    if (sandboxGuard()) return;
     await updateSticker.mutateAsync({ id: editingSticker.id, content: editContent, project_id: editProjectId });
     setEditingSticker(null);
   };
 
   const handleDelete = async () => {
     if (!deletingId) return;
+    if (sandboxGuard()) return;
     await deleteSticker.mutateAsync(deletingId);
     setDeletingId(null);
     setEditingSticker(null);

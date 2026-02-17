@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/contexts/AppContext';
+import { sandboxToast } from '@/lib/sandbox';
 
 export function useProjects() {
   const { workspaceId } = useAppContext();
@@ -18,6 +19,7 @@ export function useProjects() {
 
 export function useUpdateProject() {
   const qc = useQueryClient();
+  const { isSandbox } = useAppContext();
   return useMutation({
     mutationFn: async (params: {
       id: string;
@@ -28,10 +30,11 @@ export function useUpdateProject() {
       start_date?: string | null;
       end_date?: string | null;
     }) => {
+      if (isSandbox) { sandboxToast(); return; }
       const { id, ...updates } = params;
       const { error } = await supabase.from('projects').update(updates).eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['projects'] }),
+    onSuccess: () => { if (!isSandbox) qc.invalidateQueries({ queryKey: ['projects'] }); },
   });
 }

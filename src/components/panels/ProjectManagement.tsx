@@ -389,6 +389,7 @@ const ProjectManagement = () => {
                         <div key={ws.toISOString()} className="px-0.5 py-0.5 text-center border-r tabular-nums text-xs flex flex-col gap-0.5 justify-center">
                           {mode === 'plan' ? (
                             <input
+                              key={`plan-${planned}`}
                               type="number"
                               min={0}
                               defaultValue={planned || ''}
@@ -403,6 +404,7 @@ const ProjectManagement = () => {
                           ) : (
                             <>
                               <input
+                                key={`rp-${planned}`}
                                 type="number"
                                 min={0}
                                 defaultValue={planned || ''}
@@ -416,6 +418,7 @@ const ProjectManagement = () => {
                                 onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
                               />
                               <input
+                                key={`ra-${recorded}`}
                                 type="number"
                                 min={0}
                                 defaultValue={recorded || ''}

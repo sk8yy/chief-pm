@@ -423,28 +423,7 @@ const TaskGantt: React.FC<Props> = ({ tasks, projectId, projectName, users, onTo
                     ))}
                   </div>
 
-                  {/* Deadline vertical lines in task rows */}
-                  {deadlinePositions.map((dl, idx) => {
-                    const leftPct = ((dl.col + 0.5) / totalDays) * 100;
-                    return (
-                      <Tooltip key={`dlr-${idx}`}>
-                        <TooltipTrigger asChild>
-                          <div
-                            className="absolute top-0 bottom-0 z-5 pointer-events-auto cursor-help"
-                            style={{ left: `${leftPct}%`, width: '2px', transform: 'translateX(-1px)' }}
-                          >
-                            <div className="w-0.5 h-full" style={{ backgroundColor: 'hsl(0 80% 55% / 0.4)' }} />
-                          </div>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-[200px]">
-                          <div className="text-xs">
-                            <span className="font-medium">{dl.name}</span>
-                            <span className="text-muted-foreground ml-1">({getCategoryMeta(dl.category).label})</span>
-                          </div>
-                        </TooltipContent>
-                      </Tooltip>
-                    );
-                  })}
+                  {/* Deadline dots removed from row level - rendered inside task bars below */}
 
                   {/* Task bar - solid color with white text */}
                   {hasDates && (
@@ -472,6 +451,30 @@ const TaskGantt: React.FC<Props> = ({ tasks, projectId, projectName, users, onTo
                       >
                         <ChevronLeft className="w-3 h-3 text-white" />
                       </button>
+
+                      {/* Deadline dots inside the task bar */}
+                      {deadlinePositions.filter(dl => dl.col >= blockStart && dl.col <= blockEnd).map((dl, idx) => {
+                        const barWidth = blockEnd - blockStart + 1;
+                        const posInBar = ((dl.col - blockStart + 0.5) / barWidth) * 100;
+                        return (
+                          <Tooltip key={`dldot-${idx}`}>
+                            <TooltipTrigger asChild>
+                              <div
+                                className="absolute top-0.5 z-10 pointer-events-auto cursor-help"
+                                style={{ left: `${posInBar}%`, transform: 'translateX(-50%)' }}
+                              >
+                                <div className="w-2 h-2 rounded-full border border-white" style={{ backgroundColor: 'hsl(0 80% 55%)' }} />
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-[200px]">
+                              <div className="text-xs">
+                                <span className="font-medium">{dl.name}</span>
+                                <span className="text-muted-foreground ml-1">({getCategoryMeta(dl.category).label})</span>
+                              </div>
+                            </TooltipContent>
+                          </Tooltip>
+                        );
+                      })}
 
                       <span className="truncate">{primaryTask.description}</span>
 

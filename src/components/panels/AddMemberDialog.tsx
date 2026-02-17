@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -29,15 +29,22 @@ const AddMemberDialog = ({ open, onClose, onConfirm, availableUsers, disciplines
   const dialogRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 
-  // Position next to the anchor element
-  useEffect(() => {
-    if (!open || !anchorEl) {
-      setPos(null);
-      return;
-    }
+  const updatePos = useCallback(() => {
+    if (!open || !anchorEl) { setPos(null); return; }
     const rect = anchorEl.getBoundingClientRect();
-    setPos({ top: rect.top + window.scrollY, left: rect.right + 4 + window.scrollX });
+    setPos({ top: rect.top, left: rect.right + 4 });
   }, [open, anchorEl]);
+
+  useEffect(() => {
+    updatePos();
+    if (!open || !anchorEl) return;
+    window.addEventListener('scroll', updatePos, true);
+    window.addEventListener('resize', updatePos);
+    return () => {
+      window.removeEventListener('scroll', updatePos, true);
+      window.removeEventListener('resize', updatePos);
+    };
+  }, [updatePos]);
 
   // Close on outside click
   useEffect(() => {

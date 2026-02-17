@@ -17,6 +17,22 @@ export function useProjectDeadlines(projectId: string | undefined) {
   });
 }
 
+export function useAllDeadlines(dateRange: { start: string; end: string }) {
+  return useQuery({
+    queryKey: ['deadlines', 'all', dateRange.start, dateRange.end],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('deadlines')
+        .select('*, projects(name, discipline_id)')
+        .gte('date', dateRange.start)
+        .lte('date', dateRange.end)
+        .order('date');
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
 export function useAddDeadline() {
   const qc = useQueryClient();
   return useMutation({

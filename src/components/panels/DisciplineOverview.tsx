@@ -6,12 +6,14 @@ import { useDisciplines } from '@/hooks/useDisciplines';
 import { useUsers } from '@/hooks/useUsers';
 import { useAllHours } from '@/hooks/useAllHours';
 import { useAllAssignments, useAssignMember, useUnassignMember } from '@/hooks/useAssignments';
+import { useAllDeadlines } from '@/hooks/useDeadlines';
 import { getDisciplineColor, getDisciplineColorRecord } from '@/lib/colors';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Plus, Trash2, Users, FolderKanban, Pencil, X, Check, ClipboardPaste } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import MemberSticker from './MemberSticker';
@@ -63,8 +65,23 @@ const DisciplineOverview = () => {
 
   const { data: allHours } = useAllHours(dateRange);
   const { data: allAssignments } = useAllAssignments(dateRange);
+  const { data: allDeadlines } = useAllDeadlines(dateRange);
   const assignMemberMut = useAssignMember();
   const unassignMemberMut = useUnassignMember();
+
+  // Map deadlines by week start for quick lookup
+  const deadlinesByWeek = useMemo(() => {
+    const map: Record<string, Array<{ name: string; date: string; projectName: string }>> = {};
+    allDeadlines?.forEach((d: any) => {
+      // Find which week this deadline falls in
+      const deadlineDate = new Date(d.date + 'T00:00:00');
+      const ws = startOfWeek(deadlineDate, { weekStartsOn: 1 });
+      const wsKey = ws.toISOString();
+      if (!map[wsKey]) map[wsKey] = [];
+      map[wsKey].push({ name: d.name, date: d.date, projectName: d.projects?.name ?? 'Unknown' });
+    });
+    return map;
+  }, [allDeadlines]);
   const hoursMap = useMemo(() => {
     const map: Record<string, { planned_hours: number; recorded_hours: number | null }> = {};
     allHours?.forEach((h) => {
@@ -258,6 +275,7 @@ const DisciplineOverview = () => {
     return stickers;
   }, [users, hoursMap, mode]);
   return (
+    <TooltipProvider>
     <div className="p-4 space-y-4">
       {/* Month navigation */}
       <div className="flex items-center gap-3">
@@ -332,11 +350,31 @@ const DisciplineOverview = () => {
                       style={{ gridTemplateColumns: `180px repeat(${weeks.length}, 1fr) 80px 40px` }}
                     >
                       <div className="px-3 py-1.5 border-r">Project</div>
-                      {weeks.map((ws) => (
-                        <div key={ws.toISOString()} className="px-1 py-1.5 text-center border-r">
-                          W/C {format(ws, 'MMM d')}
-                        </div>
-                      ))}
+                      {weeks.map((ws) => {
+                        const weekDeadlines = deadlinesByWeek[ws.toISOString()];
+                        return (
+                          <div key={ws.toISOString()} className="px-1 py-1.5 text-center border-r">
+                            <span className="inline-flex items-center gap-0.5">
+                              W/C {format(ws, 'MMM d')}
+                              {weekDeadlines && weekDeadlines.length > 0 && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="w-2 h-2 rounded-full bg-destructive inline-block shrink-0 cursor-help" />
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" className="max-w-[220px]">
+                                    {weekDeadlines.map((dl, i) => (
+                                      <div key={i} className="text-xs">
+                                        <span className="font-medium">{dl.name}</span>
+                                        <span className="text-muted-foreground ml-1">({dl.projectName} · {format(new Date(dl.date + 'T00:00:00'), 'MMM d')})</span>
+                                      </div>
+                                    ))}
+                                  </TooltipContent>
+                                </Tooltip>
+                              )}
+                            </span>
+                          </div>
+                        );
+                      })}
                       <div className="px-1 py-1.5 text-center border-r">Total</div>
                       <div className="px-1 py-1.5 text-center"></div>
                     </div>
@@ -646,6 +684,7 @@ const DisciplineOverview = () => {
         defaultDisciplineId={createDialogDisciplineId}
       />
     </div>
+    </TooltipProvider>
   );
 };
 

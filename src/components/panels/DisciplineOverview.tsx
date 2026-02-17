@@ -7,6 +7,7 @@ import { useUsers } from '@/hooks/useUsers';
 import { useAllHours } from '@/hooks/useAllHours';
 import { useAllAssignments, useAssignMember, useUnassignMember } from '@/hooks/useAssignments';
 import { useAllDeadlines } from '@/hooks/useDeadlines';
+import { useAllTasks, useToggleTask } from '@/hooks/useTasks';
 import { getDisciplineColor, getDisciplineColorRecord } from '@/lib/colors';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,6 +20,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import MemberSticker from './MemberSticker';
 import AddMemberDialog from './AddMemberDialog';
 import CreateProjectDialog from './CreateProjectDialog';
+import TaskList from './TaskList';
 
 const DisciplineOverview = () => {
   const { mode } = useAppContext();
@@ -66,6 +68,8 @@ const DisciplineOverview = () => {
   const { data: allHours } = useAllHours(dateRange);
   const { data: allAssignments } = useAllAssignments(dateRange);
   const { data: allDeadlines } = useAllDeadlines(dateRange);
+  const { data: allTasks } = useAllTasks(dateRange);
+  const toggleTask = useToggleTask();
   const assignMemberMut = useAssignMember();
   const unassignMemberMut = useUnassignMember();
 
@@ -558,6 +562,23 @@ const DisciplineOverview = () => {
                       <div className="px-1 py-1.5 text-center tabular-nums font-bold border-r">{discTotal}h</div>
                       <div />
                     </div>
+
+                    {/* Tasks for this discipline */}
+                    {(() => {
+                      const discProjectIds = new Set(group.projects.map(p => p.id));
+                      const discTasks = allTasks?.filter(t => discProjectIds.has(t.project_id)) ?? [];
+                      if (discTasks.length === 0) return null;
+                      return (
+                        <div className="px-4 py-2 border-t">
+                          <TaskList
+                            tasks={discTasks}
+                            onToggle={(id, is_completed) => toggleTask.mutate({ id, is_completed })}
+                            title="Tasks"
+                            compact
+                          />
+                        </div>
+                      );
+                    })()}
 
                     {/* Add project button */}
                     <button

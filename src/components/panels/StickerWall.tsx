@@ -5,6 +5,7 @@ import { useUsers } from '@/hooks/useUsers';
 import { useProjects } from '@/hooks/useProjects';
 import { getDisciplineColor } from '@/lib/colors';
 import { useDisciplines } from '@/hooks/useDisciplines';
+import { useAllTasks } from '@/hooks/useTasks';
 import CreateProjectDialog from '@/components/panels/CreateProjectDialog';
 import ExtractionConfirmDialog, { ExtractedDeadline, ExtractedTask } from '@/components/panels/ExtractionConfirmDialog';
 import { Button } from '@/components/ui/button';
@@ -59,9 +60,19 @@ const StickerWall: React.FC = () => {
   const { data: users } = useUsers();
   const { data: projects } = useProjects();
   const { data: disciplines } = useDisciplines();
+  const { data: allTasks } = useAllTasks();
   const createSticker = useCreateSticker();
   const updateSticker = useUpdateSticker();
   const deleteSticker = useDeleteSticker();
+
+  // Build set of completed task descriptions for strikethrough on stickers
+  const completedTaskDescriptions = useMemo(() => {
+    const set = new Set<string>();
+    allTasks?.forEach(t => {
+      if (t.is_completed) set.add(t.description.toLowerCase().trim());
+    });
+    return set;
+  }, [allTasks]);
 
   /* zoom */
   const [columns, setColumns] = useState(4);
@@ -423,7 +434,19 @@ const StickerWall: React.FC = () => {
                   </button>
                 )}
 
-                <p className="flex-1 text-sm whitespace-pre-wrap overflow-hidden leading-snug">{s.content}</p>
+                <div className="flex-1 text-sm whitespace-pre-wrap overflow-hidden leading-snug">
+                  {s.content.split('\n').map((line, lineIdx) => {
+                    const isCompleted = completedTaskDescriptions.has(line.toLowerCase().trim());
+                    return (
+                      <span key={lineIdx}>
+                        {lineIdx > 0 && '\n'}
+                        <span className={isCompleted ? 'line-through text-muted-foreground/60' : ''}>
+                          {line}
+                        </span>
+                      </span>
+                    );
+                  })}
+                </div>
 
                 <div className="flex items-end justify-between gap-1 mt-1 shrink-0">
                   {s.projects && (

@@ -6,6 +6,8 @@ import { useDisciplines } from '@/hooks/useDisciplines';
 import { useHours, useUpsertHours } from '@/hooks/useHours';
 import { useUserAssignments, useAssignMember } from '@/hooks/useAssignments';
 import { useAllDeadlines, useAddDeadline } from '@/hooks/useDeadlines';
+import { useAllTasks, useToggleTask } from '@/hooks/useTasks';
+import TaskList from './TaskList';
 import { getDisciplineColor, getDisciplineColorRecord } from '@/lib/colors';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -87,6 +89,8 @@ const PersonalSchedule = () => {
   const { data: userAssignments } = useUserAssignments(currentUserId, dateRange);
   const assignMember = useAssignMember();
   const { data: allDeadlines } = useAllDeadlines(dateRange);
+  const { data: allTasks } = useAllTasks(dateRange);
+  const toggleTask = useToggleTask();
   const addDeadlineMut = useAddDeadline();
 
   // Map deadlines by date string for quick lookup
@@ -621,6 +625,24 @@ const PersonalSchedule = () => {
                 })()}
               </div>
             </div>
+
+            {/* Tasks for this week */}
+            {(() => {
+              const weekTasks = allTasks?.filter(
+                t => t.user_id === currentUserId && t.week_start === weekStartStr
+              ) ?? [];
+              if (weekTasks.length === 0) return null;
+              return (
+                <div className="px-3 py-2 border-t">
+                  <TaskList
+                    tasks={weekTasks}
+                    onToggle={(id, is_completed) => toggleTask.mutate({ id, is_completed })}
+                    title="Tasks"
+                    compact
+                  />
+                </div>
+              );
+            })()}
           </div>
         );
       })}

@@ -121,13 +121,13 @@ const StickerWall: React.FC = () => {
       {/* creating state */}
       {isCreating ? (
         <div className="flex justify-center">
-          <div className="border rounded-lg p-6 bg-card space-y-4 w-full max-w-2xl">
+          <div className="border rounded-lg p-6 bg-card space-y-4 w-full max-w-md aspect-[3/4] flex flex-col">
             <Textarea
               autoFocus
               placeholder="Type your note here..."
               value={newContent}
               onChange={(e) => setNewContent(e.target.value)}
-              className="min-h-[200px] text-base"
+              className="flex-1 text-base resize-none"
             />
             <div className="flex justify-end gap-2">
               <Button variant="ghost" onClick={() => { setIsCreating(false); setNewContent(''); }}>

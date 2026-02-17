@@ -1,0 +1,1 @@
+ALTER TABLE public.hours ADD CONSTRAINT hours_user_project_date_unique UNIQUE (user_id, project_id, date);

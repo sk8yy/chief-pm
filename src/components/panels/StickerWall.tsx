@@ -156,7 +156,7 @@ const StickerWall: React.FC = () => {
   const dialogBg = (s: Sticker | null) => {
     if (s?.projects?.discipline_id) {
       const c = getDisciplineColor(s.projects.discipline_id);
-      return { backgroundColor: c.bg, color: c.text, borderColor: c.border };
+      return { backgroundColor: c.bgLight, color: c.text, borderColor: c.border };
     }
     return {};
   };
@@ -232,7 +232,7 @@ const StickerWall: React.FC = () => {
           {(stickers as Sticker[])?.map((s) => (
             <div
               key={s.id}
-              className="relative rounded-lg border p-3 cursor-pointer transition-shadow hover:shadow-md group overflow-hidden"
+              className="relative rounded-lg border p-3 cursor-pointer transition-shadow hover:shadow-md group overflow-hidden aspect-[3/4]"
               style={stickerBg(s)}
               onDoubleClick={() => { setEditingSticker(s); setEditContent(s.content); }}
             >

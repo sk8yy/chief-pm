@@ -148,9 +148,17 @@ const StickerWall: React.FC = () => {
   const stickerBg = (s: Sticker) => {
     if (s.projects?.discipline_id) {
       const c = getDisciplineColor(s.projects.discipline_id);
-      return { backgroundColor: c.bg, color: c.text, borderColor: c.border };
+      return { backgroundColor: c.bgMuted, color: '#ffffff', borderColor: c.border };
     }
     return { backgroundColor: 'hsl(var(--muted))', color: 'hsl(var(--muted-foreground))', borderColor: 'hsl(var(--border))' };
+  };
+
+  const dialogBg = (s: Sticker | null) => {
+    if (s?.projects?.discipline_id) {
+      const c = getDisciplineColor(s.projects.discipline_id);
+      return { backgroundColor: c.bg, color: c.text, borderColor: c.border };
+    }
+    return {};
   };
 
   const matchedProject = matchResult?.matched_project_id
@@ -282,14 +290,16 @@ const StickerWall: React.FC = () => {
 
       {/* edit dialog */}
       <Dialog open={!!editingSticker} onOpenChange={(open) => { if (!open) setEditingSticker(null); }}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg" style={dialogBg(editingSticker)}>
           <DialogHeader>
             <DialogTitle>Edit Sticker</DialogTitle>
-            <DialogDescription>Edit your note. Changes save when you press Return.</DialogDescription>
+            <DialogDescription className={editingSticker?.projects?.discipline_id ? 'opacity-70' : ''}>
+              Edit your note. Changes save when you press Return.
+            </DialogDescription>
           </DialogHeader>
-          <Textarea autoFocus value={editContent} onChange={(e) => setEditContent(e.target.value)} className="min-h-[160px]" />
+          <Textarea autoFocus value={editContent} onChange={(e) => setEditContent(e.target.value)} className="min-h-[160px] bg-white/20 border-current/20" />
           {editingSticker?.projects && (
-            <p className="text-xs text-muted-foreground">Project: {editingSticker.projects.name}</p>
+            <p className="text-xs opacity-70">Project: {editingSticker.projects.name}</p>
           )}
           <DialogFooter>
             <Button variant="ghost" onClick={() => setEditingSticker(null)}>Cancel</Button>

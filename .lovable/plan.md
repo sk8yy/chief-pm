@@ -1,129 +1,89 @@
 
+# Redesign Drag-to-Fill as "Hour Block" System
 
-# Phase 1 Implementation: Foundation, Data Layer, and App Shell
-
-This phase sets up the Lovable Cloud (Supabase) backend, seeds default data, and builds the app shell with navigation and Plan/Record mode toggle. The Excel screenshots you provided will guide the visual structure of Panel 2 in Phase 2.
-
----
-
-## Step 1: Enable Lovable Cloud (Supabase)
-
-Provision the Supabase backend to host all shared data (disciplines, users, projects, hours, tasks, deadlines).
+This redesign replaces the current cell-by-cell drag fill with a visual block-based hour entry system.
 
 ---
 
-## Step 2: Database Schema
+## Concept
 
-Create the following tables via SQL migration:
-
-**disciplines**
-- `id` (uuid, PK), `name` (text), `color` (text -- hex or keyword), `sort_order` (int)
-
-**app_users** (named to avoid conflict with Supabase auth.users)
-- `id` (uuid, PK), `name` (text), `discipline_id` (FK to disciplines)
-
-**projects**
-- `id` (uuid, PK), `name` (text), `job_number` (text, default 'xxxxxx-xx'), `discipline_id` (FK), `manager_id` (FK to app_users, nullable), `sort_order` (int)
-
-**hours**
-- `id` (uuid, PK), `user_id` (FK), `project_id` (FK), `date` (date), `planned_hours` (numeric), `recorded_hours` (numeric, nullable)
-
-**tasks**
-- `id` (uuid, PK), `description` (text), `project_id` (FK), `user_id` (FK), `week_start` (date), `is_planned` (boolean), `is_completed` (boolean, default false)
-
-**deadlines**
-- `id` (uuid, PK), `name` (text), `date` (date), `project_id` (FK, nullable), `created_by` (FK to app_users), `type` (text -- 'global' or 'personal')
-
-All tables get RLS policies allowing full access (no auth in v1).
+When a user drags across multiple day cells in a project row, instead of auto-filling 8 hours per cell, a **floating rounded-rectangle block** appears spanning those cells. The block:
+- Uses the discipline's color scheme (rounded corners, colored background)
+- Has no initial value -- prompts user to type a total
+- Displays the total hours centered on the block
+- On single-click, opens a dropdown dialog with individual day inputs for hour distribution
 
 ---
 
-## Step 3: Seed Default Data
+## Implementation Steps
 
-Insert via SQL migration:
+### 1. New Data Structure: Hour Blocks
 
-**Disciplines** (with color families matching your Excel):
-| Name | Color Family |
-|------|-------------|
-| Landscape | Green (#4CAF50 family) |
-| Urban Design | Pink/Orange (#FF7043 family) |
-| Urban Planning | Orange (#FF9800 family) |
-| Mainland | Purple (#7E57C2 family) |
-| Leave | Blue (#42A5F5 family) |
+Create a new component `src/components/panels/HourBlock.tsx` that represents a contiguous block of hours across multiple days for one project row.
 
-**Users:**
-| Name | Discipline |
-|------|-----------|
-| Ayaan | Mainland |
-| Leo | Urban Design |
-| Fischer | Urban Design |
-| Eleen | Landscape |
-| Gary | Landscape |
+A block is defined by:
+- `projectId`, `startDate`, `endDate` (contiguous range)
+- `totalHours` (user-entered)
+- `distribution`: record of date -> hours (for manual per-day breakdown)
 
-**Projects:**
-| Name | Job Number | Discipline |
-|------|-----------|-----------|
-| AAHK EIA | 276007-01 | Urban Planning |
-| HX TOD | 308070-07 | Urban Design |
-| Ludan Village | xxxxxx-xx | Landscape |
-| Qianwan Park | xxxxxx-xx | Mainland |
+### 2. Rework Drag State in PersonalSchedule
 
----
+Replace the current `dragState` (which stores a fill value) with a new model:
+- On mousedown on an empty cell, begin tracking a drag range (start column index, current column index) within one project row
+- On mouseup, create an "hour block" spanning those columns
+- Immediately show an inline input on the block for the user to type the total hours
+- Once total is entered (Enter or blur), distribute hours evenly across the days and persist to the database
 
-## Step 4: App Shell and Layout
+### 3. Hour Block Visual Component (`HourBlock.tsx`)
 
-**New files to create:**
+- Rendered as an absolutely-positioned rounded rectangle overlaying the day cells it spans
+- Background color from the discipline color palette (with opacity)
+- Border using the discipline border color
+- Displays total hours centered
+- On single-click: opens a Popover (using Radix Popover) anchored to the block, containing N input fields (one per covered day) pre-filled with the current distribution
+- User can adjust individual day values; the total updates accordingly
+- On closing the popover, persists all values to the database
 
-- `src/contexts/AppContext.tsx` -- Global state: active panel, current user, plan/record mode
-- `src/components/AppHeader.tsx` -- Header bar with:
-  - Three panel buttons (Discipline Overview, Personal Schedule, Project Management)
-  - Plan/Record toggle switch
-  - User selector dropdown (populated from app_users table)
-- `src/pages/Index.tsx` -- Renders header + conditionally renders the active panel component (placeholder panels for now)
+### 4. Modify HourCell for Block Awareness
 
-**Visual behavior:**
-- Plan mode: Light theme (default Tailwind/shadcn styles)
-- Record mode: Adds `dark` class to root, applying dark background, light text, subdued accent colors
-- Active panel button is highlighted; inactive ones are muted
+- HourCell still handles individual cell clicks for single-day edits
+- Cells that are part of a block show as "covered" (the block overlay handles display)
+- Drag handlers remain but now create blocks instead of filling values
 
-**Placeholder panel components** (to be built in later phases):
-- `src/components/panels/DisciplineOverview.tsx`
-- `src/components/panels/PersonalSchedule.tsx`
-- `src/components/panels/ProjectManagement.tsx`
+### 5. Block Detection from Existing Data
 
-Each placeholder shows the panel name and a brief description so you can verify navigation works.
+To render blocks from persisted data, we need to detect contiguous runs of hours for the same project within a week. Logic:
+- Scan each project row's days left-to-right
+- Group consecutive days that have hours > 0 into a "block"
+- Render each group as an HourBlock overlay
+- Individual cells with hours that aren't part of a contiguous run render normally via HourCell
+
+### 6. Block Distribution Dialog
+
+The popover that appears on block click contains:
+- A header showing the date range (e.g., "Mon 3 - Wed 5")
+- N input boxes labeled with day names, each editable
+- A "Total" display that sums the inputs in real-time
+- Changes are saved on blur/close, persisting each day's value individually to the hours table
 
 ---
 
-## Step 5: Data Hooks
+## Technical Details
 
-Create React Query hooks for fetching seed data:
+### Files to Create
+- `src/components/panels/HourBlock.tsx` -- The floating block component with popover
 
-- `src/hooks/useUsers.ts` -- fetch all app_users with discipline info
-- `src/hooks/useProjects.ts` -- fetch all projects with discipline info
-- `src/hooks/useDisciplines.ts` -- fetch all disciplines
+### Files to Modify
+- `src/components/panels/PersonalSchedule.tsx` -- Replace drag-fill logic with block creation; add block detection and rendering with relative positioning on project rows
+- `src/components/panels/HourCell.tsx` -- Simplify: remove drag highlight styling for cells covered by blocks; keep single-cell click-to-edit for non-block cells
 
-These hooks will be used by the header (user selector) and all panels.
+### Positioning Strategy
+- Each project row (the 7-day cell area) gets `position: relative`
+- Hour blocks are `position: absolute` overlays calculated from grid column positions
+- Block left/width derived from which day columns it spans (each column is `1fr` within the 7-column area)
 
----
-
-## Step 6: Discipline Color Utility
-
-Create `src/lib/colors.ts` with:
-- A mapping from discipline name/id to color values (background, text, border, desaturated variant for Record mode)
-- Helper functions: `getDisciplineColor(disciplineId)`, `getDisciplineColorRecord(disciplineId)`
-- Colors match the Excel reference: green rows for Landscape, orange for Urban Design/Planning, purple for Mainland, blue-ish for Leave
-
----
-
-## What This Phase Delivers
-
-After Phase 1, you will see:
-1. A working header with three panel buttons that switch views
-2. A Plan/Record toggle that switches the entire UI between light and dark themes
-3. A user dropdown populated with the 5 default users from the database
-4. Three placeholder panels confirming navigation works
-5. A fully provisioned database with all tables and seed data ready for Phase 2
-
-Phase 2 (Personal Schedule panel) will follow immediately, using the Excel layout you shared as the visual reference -- weekly rows with discipline-grouped project rows, day columns, colored hour blocks, weekly summary, OT calculation, and the Time Booking Summary table at the bottom.
-
+### Data Flow
+1. User drags across cells -> creates a temporary block (no value yet)
+2. User types total hours into the block's inline input -> distributes evenly, persists via `handleHourChange` for each date
+3. User clicks existing block -> popover opens with per-day inputs -> edits persist on close
+4. Blocks are reconstructed from `hoursMap` data on each render by detecting contiguous non-zero runs

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWorkspaces, useCreateWorkspace, useUpdateWorkspace } from '@/hooks/useWorkspaces';
 import { useDeleteWorkspace } from '@/hooks/useDeleteWorkspace';
+import { useProfile } from '@/hooks/useProfile';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -9,11 +10,12 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, FolderOpen, Pencil, Check, Trash2 } from 'lucide-react';
+import { Plus, FolderOpen, Pencil, Check, Trash2, LogOut } from 'lucide-react';
 
 const WelcomePage = () => {
   const navigate = useNavigate();
-  const { data: workspaces, isLoading } = useWorkspaces();
+  const { profileId, profile, loading: profileLoading, createProfile, logout } = useProfile();
+  const { data: workspaces, isLoading } = useWorkspaces(profileId);
   const createWorkspace = useCreateWorkspace();
   const updateWorkspace = useUpdateWorkspace();
   const deleteWorkspace = useDeleteWorkspace();
@@ -21,9 +23,10 @@ const WelcomePage = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [nameInput, setNameInput] = useState('');
 
   const handleCreate = async () => {
-    const ws = await createWorkspace.mutateAsync('New Project');
+    const ws = await createWorkspace.mutateAsync({ name: 'New Project', ownerId: profileId });
     navigate(`/setup/${ws.id}`);
   };
 
@@ -40,8 +43,53 @@ const WelcomePage = () => {
     setDeletingId(null);
   };
 
+  const handleSignIn = async () => {
+    if (!nameInput.trim()) return;
+    await createProfile(nameInput.trim());
+  };
+
+  if (profileLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    );
+  }
+
+  // Name input gate
+  if (!profileId) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-8">
+        <h1 className="text-5xl md:text-7xl font-extrabold text-center mb-12 animate-pulse bg-gradient-to-r from-[hsl(262,47%,55%)] via-[hsl(207,89%,61%)] via-[hsl(122,39%,49%)] via-[hsl(36,100%,50%)] to-[hsl(14,100%,63%)] bg-clip-text text-transparent leading-tight pb-2">
+          Welcome to Chief Project Manager!
+        </h1>
+        <Card className="p-8 max-w-md w-full flex flex-col items-center gap-4">
+          <h2 className="text-xl font-semibold text-foreground">Enter your name to get started</h2>
+          <Input
+            value={nameInput}
+            onChange={(e) => setNameInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSignIn()}
+            placeholder="Your display name"
+            className="text-center"
+            autoFocus
+          />
+          <Button onClick={handleSignIn} disabled={!nameInput.trim()} className="w-full">
+            Continue
+          </Button>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-8">
+      <div className="absolute top-4 right-4 flex items-center gap-2">
+        <span className="text-sm text-muted-foreground">{profile?.display_name}</span>
+        <Button variant="ghost" size="sm" onClick={logout}>
+          <LogOut className="h-4 w-4" />
+        </Button>
+      </div>
+
       <h1 className="text-5xl md:text-7xl font-extrabold text-center mb-12 animate-pulse bg-gradient-to-r from-[hsl(262,47%,55%)] via-[hsl(207,89%,61%)] via-[hsl(122,39%,49%)] via-[hsl(36,100%,50%)] to-[hsl(14,100%,63%)] bg-clip-text text-transparent leading-tight pb-2">
         Welcome to Chief Project Manager!
       </h1>
@@ -126,13 +174,12 @@ const WelcomePage = () => {
         </div>
       )}
 
-      {/* Delete confirmation */}
       <AlertDialog open={!!deletingId} onOpenChange={(o) => { if (!o) setDeletingId(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this project?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete the project and all its data (disciplines, projects, hours, tasks, etc.). This cannot be undone.
+              This will permanently delete the project and all its data. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addMonths, subMonths, eachWeekOfInterval, eachDayOfInterval } from 'date-fns';
 import { useAppContext } from '@/contexts/AppContext';
 import { useProjects } from '@/hooks/useProjects';
@@ -8,11 +8,13 @@ import { useAllHours } from '@/hooks/useAllHours';
 import { getDisciplineColor, getDisciplineColorRecord } from '@/lib/colors';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Plus, Trash2, Users, FolderKanban, Pencil, X, Check } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, Plus, Trash2, Users, FolderKanban, Pencil, X, Check, ClipboardPaste } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
+import MemberSticker from './MemberSticker';
+import AddMemberDialog from './AddMemberDialog';
 
 const DisciplineOverview = () => {
   const { mode } = useAppContext();
@@ -36,6 +38,12 @@ const DisciplineOverview = () => {
 
   const queryClient = useQueryClient();
 
+  // Clipboard for copy/paste stickers
+  const [clipboard, setClipboard] = useState<{ userId: string; hours: number } | null>(null);
+  // Add member dialog state
+  const [addDialogTarget, setAddDialogTarget] = useState<{ projectId: string; weekStart: Date } | null>(null);
+  // Hover state for week cells
+  const [hoveredCell, setHoveredCell] = useState<string | null>(null);
   const { data: projects } = useProjects();
   const { data: disciplines } = useDisciplines();
   const { data: users } = useUsers();
@@ -174,6 +182,75 @@ const DisciplineOverview = () => {
     queryClient.invalidateQueries({ queryKey: ['app_users'] });
   };
 
+  // Sticker: add/paste member hours for a project week (distribute evenly across 7 days)
+  const upsertStickerHours = useCallback(async (userId: string, projectId: string, weekStart: Date, totalHours: number) => {
+    const days = eachDayOfInterval({ start: weekStart, end: endOfWeek(weekStart, { weekStartsOn: 1 }) });
+    const field = mode === 'plan' ? 'planned_hours' : 'recorded_hours';
+    const perDay = Math.floor(totalHours / 7);
+    const remainder = totalHours - perDay * 7;
+    const rows = days.map((day, i) => ({
+      user_id: userId,
+      project_id: projectId,
+      date: format(day, 'yyyy-MM-dd'),
+      [field]: perDay + (i < remainder ? 1 : 0),
+    }));
+    for (const row of rows) {
+      const { data: existing } = await supabase
+        .from('hours')
+        .select('id, planned_hours, recorded_hours')
+        .eq('user_id', row.user_id)
+        .eq('project_id', row.project_id)
+        .eq('date', row.date)
+        .maybeSingle();
+      if (existing) {
+        await supabase.from('hours').update({ [field]: row[field] }).eq('id', existing.id);
+      } else {
+        await supabase.from('hours').insert({
+          user_id: row.user_id,
+          project_id: row.project_id,
+          date: row.date,
+          planned_hours: field === 'planned_hours' ? (row[field] as number) : 0,
+          recorded_hours: field === 'recorded_hours' ? (row[field] as number) : null,
+        });
+      }
+    }
+    queryClient.invalidateQueries({ queryKey: ['all_hours'] });
+    queryClient.invalidateQueries({ queryKey: ['hours'] });
+  }, [mode, queryClient]);
+
+  const deleteStickerHours = useCallback(async (userId: string, projectId: string, weekStart: Date) => {
+    const days = eachDayOfInterval({ start: weekStart, end: endOfWeek(weekStart, { weekStartsOn: 1 }) });
+    const field = mode === 'plan' ? 'planned_hours' : 'recorded_hours';
+    for (const day of days) {
+      const dateStr = format(day, 'yyyy-MM-dd');
+      const { data: existing } = await supabase
+        .from('hours')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('project_id', projectId)
+        .eq('date', dateStr)
+        .maybeSingle();
+      if (existing) {
+        await supabase.from('hours').update({ [field]: field === 'planned_hours' ? 0 : null }).eq('id', existing.id);
+      }
+    }
+    queryClient.invalidateQueries({ queryKey: ['all_hours'] });
+    queryClient.invalidateQueries({ queryKey: ['hours'] });
+  }, [mode, queryClient]);
+
+  // Get per-user hours for a project+week (for stickers)
+  const getProjectWeekStickers = useCallback((projectId: string, weekStart: Date) => {
+    if (!users) return [];
+    const stickers: { userId: string; userName: string; disciplineId: string | null; hours: number }[] = [];
+    users.forEach((u) => {
+      const { planned, recorded } = getUserProjectWeekHours(u.id, projectId, weekStart);
+      const val = mode === 'plan' ? planned : recorded;
+      if (val > 0) {
+        stickers.push({ userId: u.id, userName: u.name, disciplineId: u.discipline_id, hours: val });
+      }
+    });
+    return stickers;
+  }, [users, hoursMap, mode]);
   return (
     <div className="p-4 space-y-4">
       {/* Month navigation */}
@@ -272,20 +349,69 @@ const DisciplineOverview = () => {
                       return (
                         <div key={project.id}>
                           <div
-                            className="grid text-sm border-b last:border-b-0 hover:bg-muted/20 transition-colors cursor-pointer"
+                            className="grid text-sm border-b last:border-b-0"
                             style={{ gridTemplateColumns: `180px repeat(${weeks.length}, 1fr) 80px 40px` }}
-                            onClick={() => toggleProject(project.id)}
                           >
-                            <div className="px-3 py-1.5 border-r font-medium flex items-center gap-1.5">
+                            <div
+                              className="px-3 py-1.5 border-r font-medium flex items-center gap-1.5 cursor-pointer hover:bg-muted/20"
+                              onClick={() => toggleProject(project.id)}
+                            >
                               {projectExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
                               <span className="truncate">{project.name}</span>
                               <span className="text-[10px] text-muted-foreground ml-auto shrink-0">{project.job_number}</span>
                             </div>
                             {weeks.map((ws) => {
+                              const cellKey = `${project.id}_${ws.toISOString()}`;
+                              const stickers = getProjectWeekStickers(project.id, ws);
+                              const isHovered = hoveredCell === cellKey;
                               const weekHrs = getProjectWeekHours(project.id, ws);
+
                               return (
-                                <div key={ws.toISOString()} className="px-1 py-1.5 text-center border-r tabular-nums">
-                                  {weekHrs > 0 ? weekHrs : <span className="text-muted-foreground/40">—</span>}
+                                <div
+                                  key={ws.toISOString()}
+                                  className="px-1 py-1 border-r min-h-[36px] relative group"
+                                  onMouseEnter={() => setHoveredCell(cellKey)}
+                                  onMouseLeave={() => setHoveredCell(null)}
+                                >
+                                  {/* Stickers */}
+                                  <div className="flex flex-wrap gap-0.5">
+                                    {stickers.map((s) => (
+                                      <MemberSticker
+                                        key={s.userId}
+                                        userName={s.userName}
+                                        hours={s.hours}
+                                        disciplineId={s.disciplineId}
+                                        onDelete={() => deleteStickerHours(s.userId, project.id, ws)}
+                                        onCopy={() => setClipboard({ userId: s.userId, hours: s.hours })}
+                                      />
+                                    ))}
+                                  </div>
+
+                                  {/* Hover buttons: Add + Paste */}
+                                  {isHovered && (
+                                    <div className="flex gap-0.5 mt-0.5">
+                                      <button
+                                        className="flex items-center gap-0.5 text-[9px] text-muted-foreground hover:text-foreground bg-muted/60 hover:bg-muted rounded px-1 py-0.5 transition-colors"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setAddDialogTarget({ projectId: project.id, weekStart: ws });
+                                        }}
+                                      >
+                                        <Plus className="h-2.5 w-2.5" /> Add
+                                      </button>
+                                      {clipboard && (
+                                        <button
+                                          className="flex items-center gap-0.5 text-[9px] text-muted-foreground hover:text-foreground bg-muted/60 hover:bg-muted rounded px-1 py-0.5 transition-colors"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            upsertStickerHours(clipboard.userId, project.id, ws, clipboard.hours);
+                                          }}
+                                        >
+                                          <ClipboardPaste className="h-2.5 w-2.5" /> Paste
+                                        </button>
+                                      )}
+                                    </div>
+                                  )}
                                 </div>
                               );
                             })}
@@ -303,7 +429,7 @@ const DisciplineOverview = () => {
                             </div>
                           </div>
 
-                          {/* Expanded: user breakdown */}
+                          {/* Expanded: user breakdown (detailed) */}
                           {projectExpanded && projectUsers.length > 0 && (
                             <div className="bg-muted/10">
                               {projectUsers.map((user) => (
@@ -498,6 +624,30 @@ const DisciplineOverview = () => {
           </div>
         );
       })}
+
+      {/* Add member dialog */}
+      <AddMemberDialog
+        open={!!addDialogTarget}
+        onClose={() => setAddDialogTarget(null)}
+        onConfirm={(userId, hours) => {
+          if (addDialogTarget) {
+            upsertStickerHours(userId, addDialogTarget.projectId, addDialogTarget.weekStart, hours);
+            setAddDialogTarget(null);
+          }
+        }}
+        availableUsers={users ?? []}
+      />
+
+      {/* Clipboard indicator */}
+      {clipboard && (
+        <div className="fixed bottom-4 right-4 bg-secondary text-secondary-foreground text-xs rounded-md px-3 py-1.5 shadow-lg flex items-center gap-2 z-50">
+          <ClipboardPaste className="h-3.5 w-3.5" />
+          Copied: {users?.find(u => u.id === clipboard.userId)?.name} · {clipboard.hours}h
+          <button onClick={() => setClipboard(null)} className="ml-1 hover:text-destructive">
+            <X className="h-3 w-3" />
+          </button>
+        </div>
+      )}
     </div>
   );
 };

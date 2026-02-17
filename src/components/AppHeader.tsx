@@ -42,16 +42,18 @@ const AppHeader = () => {
           <span className={mode === 'record' ? 'font-semibold text-foreground' : 'text-muted-foreground'}>Record</span>
         </div>
 
-        <Select value={currentUserId ?? ''} onValueChange={setCurrentUserId}>
-          <SelectTrigger className="w-[140px] h-8">
-            <SelectValue placeholder="Select user" />
-          </SelectTrigger>
-          <SelectContent>
-            {users?.map((u) => (
-              <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {activePanel === 'personal' && (
+          <Select value={currentUserId ?? ''} onValueChange={setCurrentUserId}>
+            <SelectTrigger className="w-[140px] h-8">
+              <SelectValue placeholder="Select user" />
+            </SelectTrigger>
+            <SelectContent>
+              {users?.map((u) => (
+                <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </div>
     </header>
   );

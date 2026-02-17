@@ -22,7 +22,8 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import CreateProjectDialog from './CreateProjectDialog';
 
 const ProjectManagement = () => {
-  const { mode, workspaceId } = useAppContext();
+  const { mode, workspaceId, isSandbox } = useAppContext();
+  const sandboxGuard = () => { if (isSandbox) { return true; } return false; };
   const qc = useQueryClient();
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -108,7 +109,7 @@ const ProjectManagement = () => {
 
   // Upsert weekly hours — distributes total evenly across 7 days
   const handleWeekHoursChange = useCallback(async (userId: string, weekStart: Date, total: number, field: 'planned_hours' | 'recorded_hours') => {
-    if (!selectedProjectId) return;
+    if (isSandbox || !selectedProjectId) return;
     const days = eachDayOfInterval({ start: weekStart, end: endOfWeek(weekStart, { weekStartsOn: 1 }) });
     const perDay = Math.floor(total / 7);
     const remainder = total - perDay * 7;
@@ -141,7 +142,7 @@ const ProjectManagement = () => {
 
   // Add member
   const handleAddMember = async (userId: string) => {
-    if (!selectedProjectId) return;
+    if (!selectedProjectId || isSandbox) return;
     // Insert zero-hour entries for each day in the current week range
     const rows = weeks.flatMap((ws) => {
       const days = eachDayOfInterval({ start: ws, end: endOfWeek(ws, { weekStartsOn: 1 }) });
@@ -166,7 +167,7 @@ const ProjectManagement = () => {
 
   // Remove member
   const handleRemoveMember = async (userId: string) => {
-    if (!selectedProjectId) return;
+    if (!selectedProjectId || isSandbox) return;
     await supabase.from('hours').delete().eq('user_id', userId).eq('project_id', selectedProjectId).gte('date', dateRange.start).lte('date', dateRange.end);
     // Also remove assignment records
     const weekStarts = weeks.map((ws) => format(ws, 'yyyy-MM-dd'));
@@ -266,6 +267,7 @@ const ProjectManagement = () => {
 
         {selectedProject && (
           <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={async () => {
+            if (isSandbox) { sandboxGuard(); return; }
             if (!confirm('Delete this project and all its data?')) return;
             await supabase.from('tasks').delete().eq('project_id', selectedProjectId);
             await supabase.from('hours').delete().eq('project_id', selectedProjectId);

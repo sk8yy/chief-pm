@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/contexts/AppContext';
+import { sandboxToast } from '@/lib/sandbox';
 
 export interface TaskRow {
   id: string;
@@ -12,6 +13,11 @@ export interface TaskRow {
   is_completed: boolean;
   start_date: string | null;
   end_date: string | null;
+}
+
+const TASK_KEYS = ['tasks', 'all_tasks', 'project_tasks'] as const;
+function invalidateTasks(qc: ReturnType<typeof useQueryClient>) {
+  TASK_KEYS.forEach(k => qc.invalidateQueries({ queryKey: [k] }));
 }
 
 export function useTasks(filters?: { userId?: string; projectId?: string; weekStart?: string }) {
@@ -65,7 +71,7 @@ export function useProjectTasks(projectId?: string) {
 
 export function useUpsertTask() {
   const qc = useQueryClient();
-  const { workspaceId } = useAppContext();
+  const { workspaceId, isSandbox } = useAppContext();
   return useMutation({
     mutationFn: async (params: {
       id?: string;
@@ -78,6 +84,7 @@ export function useUpsertTask() {
       start_date?: string | null;
       end_date?: string | null;
     }) => {
+      if (isSandbox) { sandboxToast(); return; }
       if (params.id) {
         const { error } = await supabase.from('tasks').update({
           description: params.description,
@@ -102,17 +109,13 @@ export function useUpsertTask() {
         if (error) throw error;
       }
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['tasks'] });
-      qc.invalidateQueries({ queryKey: ['all_tasks'] });
-      qc.invalidateQueries({ queryKey: ['project_tasks'] });
-    },
+    onSuccess: () => { if (!isSandbox) invalidateTasks(qc); },
   });
 }
 
 export function useCreateTask() {
   const qc = useQueryClient();
-  const { workspaceId } = useAppContext();
+  const { workspaceId, isSandbox } = useAppContext();
   return useMutation({
     mutationFn: async (params: {
       user_id: string;
@@ -122,6 +125,7 @@ export function useCreateTask() {
       start_date?: string | null;
       end_date?: string | null;
     }) => {
+      if (isSandbox) { sandboxToast(); return null as any; }
       const { data, error } = await supabase.from('tasks').insert({
         user_id: params.user_id,
         project_id: params.project_id,
@@ -136,55 +140,45 @@ export function useCreateTask() {
       if (error) throw error;
       return data as TaskRow;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['tasks'] });
-      qc.invalidateQueries({ queryKey: ['all_tasks'] });
-      qc.invalidateQueries({ queryKey: ['project_tasks'] });
-    },
+    onSuccess: () => { if (!isSandbox) invalidateTasks(qc); },
   });
 }
 
 export function useDeleteTask() {
   const qc = useQueryClient();
+  const { isSandbox } = useAppContext();
   return useMutation({
     mutationFn: async (id: string) => {
+      if (isSandbox) { sandboxToast(); return; }
       const { error } = await supabase.from('tasks').delete().eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['tasks'] });
-      qc.invalidateQueries({ queryKey: ['all_tasks'] });
-      qc.invalidateQueries({ queryKey: ['project_tasks'] });
-    },
+    onSuccess: () => { if (!isSandbox) invalidateTasks(qc); },
   });
 }
 
 export function useToggleTask() {
   const qc = useQueryClient();
+  const { isSandbox } = useAppContext();
   return useMutation({
     mutationFn: async ({ id, is_completed }: { id: string; is_completed: boolean }) => {
+      if (isSandbox) { sandboxToast(); return; }
       const { error } = await supabase.from('tasks').update({ is_completed }).eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['tasks'] });
-      qc.invalidateQueries({ queryKey: ['all_tasks'] });
-      qc.invalidateQueries({ queryKey: ['project_tasks'] });
-    },
+    onSuccess: () => { if (!isSandbox) invalidateTasks(qc); },
   });
 }
 
 export function useUpdateTaskDates() {
   const qc = useQueryClient();
+  const { isSandbox } = useAppContext();
   return useMutation({
     mutationFn: async ({ id, start_date, end_date }: { id: string; start_date: string | null; end_date: string | null }) => {
+      if (isSandbox) { sandboxToast(); return; }
       const { error } = await supabase.from('tasks').update({ start_date, end_date }).eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['tasks'] });
-      qc.invalidateQueries({ queryKey: ['all_tasks'] });
-      qc.invalidateQueries({ queryKey: ['project_tasks'] });
-    },
+    onSuccess: () => { if (!isSandbox) invalidateTasks(qc); },
   });
 }

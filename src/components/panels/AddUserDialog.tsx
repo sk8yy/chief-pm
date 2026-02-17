@@ -22,7 +22,7 @@ interface AddUserDialogProps {
 }
 
 const AddUserDialog = ({ open, onClose, disciplines }: AddUserDialogProps) => {
-  const { workspaceId } = useAppContext();
+  const { workspaceId, isSandbox } = useAppContext();
   const qc = useQueryClient();
   const [name, setName] = useState('');
   const [disciplineId, setDisciplineId] = useState('');
@@ -30,6 +30,7 @@ const AddUserDialog = ({ open, onClose, disciplines }: AddUserDialogProps) => {
 
   const handleConfirm = async () => {
     if (!name.trim() || !disciplineId || !workspaceId) return;
+    if (isSandbox) { const { sandboxToast } = await import('@/lib/sandbox'); sandboxToast(); onClose(); return; }
     setIsSubmitting(true);
     try {
       await supabase.from('app_users').insert({

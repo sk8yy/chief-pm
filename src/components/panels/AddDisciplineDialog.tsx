@@ -27,7 +27,7 @@ interface AddDisciplineDialogProps {
 }
 
 const AddDisciplineDialog = ({ open, onClose, existingCount }: AddDisciplineDialogProps) => {
-  const { workspaceId } = useAppContext();
+  const { workspaceId, isSandbox } = useAppContext();
   const qc = useQueryClient();
   const [name, setName] = useState('');
   const [saving, setSaving] = useState(false);
@@ -42,6 +42,7 @@ const AddDisciplineDialog = ({ open, onClose, existingCount }: AddDisciplineDial
 
   const handleCreate = async () => {
     if (!name.trim() || !workspaceId) return;
+    if (isSandbox) { const { sandboxToast } = await import('@/lib/sandbox'); sandboxToast(); onClose(); return; }
     setSaving(true);
     const { data, error } = await supabase.from('disciplines').insert({
       name: name.trim(),

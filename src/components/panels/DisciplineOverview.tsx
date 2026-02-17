@@ -25,7 +25,7 @@ import AddDisciplineDialog from './AddDisciplineDialog';
 import TaskList from './TaskList';
 
 const DisciplineOverview = () => {
-  const { mode, workspaceId } = useAppContext();
+  const { mode, workspaceId, isSandbox } = useAppContext();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [expandedDisciplines, setExpandedDisciplines] = useState<Set<string>>(new Set());
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
@@ -183,19 +183,20 @@ const DisciplineOverview = () => {
   };
 
   const deleteProject = async (projectId: string) => {
-    await supabase.from('projects').delete().eq('id', projectId);
+    if (isSandbox) return;
     queryClient.invalidateQueries({ queryKey: ['projects'] });
   };
 
   const renameProject = async (projectId: string) => {
     if (!editProjectName.trim()) { setEditingProjectId(null); return; }
+    if (isSandbox) { setEditingProjectId(null); return; }
     await supabase.from('projects').update({ name: editProjectName.trim() }).eq('id', projectId);
     setEditingProjectId(null);
     queryClient.invalidateQueries({ queryKey: ['projects'] });
   };
 
   const addPerson = async (disciplineId: string) => {
-    if (!newPersonName.trim()) return;
+    if (!newPersonName.trim() || isSandbox) return;
     await supabase.from('app_users').insert({
       name: newPersonName.trim(),
       discipline_id: disciplineId,
@@ -207,24 +208,25 @@ const DisciplineOverview = () => {
   };
 
   const deletePerson = async (userId: string) => {
-    await supabase.from('app_users').delete().eq('id', userId);
+    if (isSandbox) return;
     queryClient.invalidateQueries({ queryKey: ['app_users'] });
   };
 
   const updatePerson = async (userId: string) => {
-    if (!editPersonName.trim()) return;
+    if (!editPersonName.trim() || isSandbox) return;
     await supabase.from('app_users').update({ name: editPersonName.trim() }).eq('id', userId);
     setEditingPerson(null);
     queryClient.invalidateQueries({ queryKey: ['app_users'] });
   };
 
   const movePersonDiscipline = async (userId: string, newDisciplineId: string) => {
-    await supabase.from('app_users').update({ discipline_id: newDisciplineId }).eq('id', userId);
+    if (isSandbox) return;
     queryClient.invalidateQueries({ queryKey: ['app_users'] });
   };
 
   // Sticker: add/paste member hours for a project week (distribute evenly across 7 days)
   const upsertStickerHours = useCallback(async (userId: string, projectId: string, weekStart: Date, totalHours: number) => {
+    if (isSandbox) return;
     const days = eachDayOfInterval({ start: weekStart, end: endOfWeek(weekStart, { weekStartsOn: 1 }) });
     const field = mode === 'plan' ? 'planned_hours' : 'recorded_hours';
     const perDay = Math.floor(totalHours / 7);
@@ -267,6 +269,7 @@ const DisciplineOverview = () => {
   }, [mode, queryClient, assignMemberMut]);
 
   const deleteStickerHours = useCallback(async (userId: string, projectId: string, weekStart: Date) => {
+    if (isSandbox) return;
     const days = eachDayOfInterval({ start: weekStart, end: endOfWeek(weekStart, { weekStartsOn: 1 }) });
     const field = mode === 'plan' ? 'planned_hours' : 'recorded_hours';
     for (const day of days) {

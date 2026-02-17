@@ -19,40 +19,39 @@ const SAMPLE_WORKSPACE_ID = '00000000-0000-0000-0000-000000000001';
 
 const WorkspaceView = () => {
   const { workspaceId } = useParams<{ workspaceId: string }>();
-  const { activePanel, setWorkspaceId, profileId, setIsReadOnly } = useAppContext();
+  const { activePanel, setWorkspaceId, profileId, isSandbox, setIsSandbox } = useAppContext();
   const { data: workspaces } = useWorkspaces(profileId);
 
   useEffect(() => {
     if (workspaceId) setWorkspaceId(workspaceId);
     return () => {
       setWorkspaceId(null);
-      setIsReadOnly(false);
+      setIsSandbox(false);
     };
-  }, [workspaceId, setWorkspaceId, setIsReadOnly]);
+  }, [workspaceId, setWorkspaceId, setIsSandbox]);
 
-  // Determine read-only: sample workspace is read-only for non-owners
+  // Sandbox mode: sample workspace is sandbox for non-owners
   useEffect(() => {
     if (!workspaceId || !workspaces) return;
     const ws = workspaces.find(w => w.id === workspaceId);
     if (workspaceId === SAMPLE_WORKSPACE_ID && ws?.owner_id && ws.owner_id !== profileId) {
-      setIsReadOnly(true);
+      setIsSandbox(true);
     } else {
-      setIsReadOnly(false);
+      setIsSandbox(false);
     }
-  }, [workspaceId, workspaces, profileId, setIsReadOnly]);
+  }, [workspaceId, workspaces, profileId, setIsSandbox]);
 
   const Panel = panelComponents[activePanel];
-  const { isReadOnly } = useAppContext();
 
   return (
     <div className="min-h-screen bg-background text-foreground">
       <AppHeader />
-      {isReadOnly && (
-        <div className="bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 text-center text-sm py-1.5 px-4 border-b border-amber-200 dark:border-amber-800">
-          🔒 This is a sample project — view only
+      {isSandbox && (
+        <div className="bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 text-center text-sm py-1.5 px-4 border-b border-blue-200 dark:border-blue-800">
+          🧪 Sample workspace — try everything! Changes are preview-only and won't be saved.
         </div>
       )}
-      <main className={isReadOnly ? 'pointer-events-none opacity-80 select-none' : ''}>
+      <main>
         <Panel />
       </main>
     </div>

@@ -41,7 +41,7 @@ const DisciplineOverview = () => {
   // Clipboard for copy/paste stickers
   const [clipboard, setClipboard] = useState<{ userId: string; hours: number } | null>(null);
   // Add member dialog state
-  const [addDialogTarget, setAddDialogTarget] = useState<{ projectId: string; weekStart: Date } | null>(null);
+  const [addDialogTarget, setAddDialogTarget] = useState<{ projectId: string; weekStart: Date; anchorEl: HTMLElement | null } | null>(null);
   // Hover state for week cells
   const [hoveredCell, setHoveredCell] = useState<string | null>(null);
   const { data: projects } = useProjects();
@@ -397,7 +397,7 @@ const DisciplineOverview = () => {
                                         className="flex items-center gap-0.5 text-[9px] text-muted-foreground hover:text-foreground bg-muted/60 hover:bg-muted rounded px-1.5 py-0.5 transition-colors"
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          setAddDialogTarget({ projectId: project.id, weekStart: ws });
+                                          setAddDialogTarget({ projectId: project.id, weekStart: ws, anchorEl: e.currentTarget as HTMLElement });
                                         }}
                                       >
                                         <Plus className="h-2.5 w-2.5" /> Add
@@ -426,6 +426,8 @@ const DisciplineOverview = () => {
                                         setAddDialogTarget(null);
                                       }}
                                       availableUsers={users ?? []}
+                                      disciplines={disciplines ?? []}
+                                      anchorEl={addDialogTarget?.anchorEl}
                                     />
                                   )}
                                 </div>

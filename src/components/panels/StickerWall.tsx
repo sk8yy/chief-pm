@@ -133,6 +133,15 @@ const StickerWall: React.FC = () => {
           created_at: s.created_at,
         }));
 
+      // Pass existing tasks so AI can identify duplicates
+      const existingTasks = allTasks ?? [];
+      const existingTasksSummary = existingTasks.map(t => ({
+        description: t.description,
+        project_id: t.project_id,
+        start_date: t.start_date,
+        end_date: t.end_date,
+      }));
+
       const resp = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/analyze-stickers`,
         {
@@ -145,6 +154,7 @@ const StickerWall: React.FC = () => {
             stickers: selectedStickers,
             projects: projects?.map(p => ({ id: p.id, name: p.name, job_number: p.job_number })) ?? [],
             users: users?.map(u => ({ id: u.id, name: u.name })) ?? [],
+            existing_tasks: existingTasksSummary,
           }),
         }
       );
@@ -158,7 +168,7 @@ const StickerWall: React.FC = () => {
       const data = await resp.json();
       const rawTasks: ExtractedTask[] = data.tasks || [];
 
-      // Apply default start_date from sticker created_at if not specified by AI
+      // Apply default start_date from sticker created_at if not specified
       const tasksWithDefaults = rawTasks.map(t => {
         const stickerIdx = t.source_sticker_index - 1;
         const sticker = selectedStickers[stickerIdx];
@@ -170,16 +180,37 @@ const StickerWall: React.FC = () => {
         };
       });
 
-      // Dedup against existing tasks
-      const existingTasks = allTasks ?? [];
+      // Combine AI-side detection with local matching for robust dedup
+      const normalize = (s: string) => s.toLowerCase().trim().replace(/\s+/g, ' ');
       const markedTasks = tasksWithDefaults.map(t => {
-        const descKey = t.description.toLowerCase().trim();
-        const match = existingTasks.find(
-          et => et.description.toLowerCase().trim() === descKey &&
-                et.project_id === t.project_id
-        );
+        // First check AI's own detection
+        if ((t as any).is_existing) {
+          if ((t as any).has_new_dates) {
+            // Find the matching existing task to get its ID
+            const match = existingTasks.find(et =>
+              normalize(et.description) === normalize(t.description) && et.project_id === t.project_id
+            ) || existingTasks.find(et =>
+              normalize(et.description).includes(normalize(t.description)) ||
+              normalize(t.description).includes(normalize(et.description))
+            );
+            return { ...t, status: 'updated' as const, _existingId: match?.id };
+          }
+          return { ...t, status: 'already_added' as const };
+        }
+
+        // Fallback: local fuzzy matching
+        const descNorm = normalize(t.description);
+        const match = existingTasks.find(et => {
+          const etNorm = normalize(et.description);
+          // Exact match or substring containment (both directions)
+          const descMatch = etNorm === descNorm ||
+            (descNorm.length > 10 && (etNorm.includes(descNorm) || descNorm.includes(etNorm)));
+          // Project match (either same project or task has no project)
+          const projMatch = !t.project_id || et.project_id === t.project_id;
+          return descMatch && projMatch;
+        });
+
         if (match) {
-          // Check if new info (dates) was absent before
           const hasNewStart = t.start_date && !match.start_date;
           const hasNewEnd = t.end_date && !match.end_date;
           if (hasNewStart || hasNewEnd) {

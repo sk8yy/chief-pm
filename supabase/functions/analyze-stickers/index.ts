@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    const { stickers, projects, users } = await req.json();
+    const { stickers, projects, users, existing_tasks } = await req.json();
 
     if (!stickers?.length) {
       return new Response(JSON.stringify({ error: "No stickers provided" }), {
@@ -32,6 +32,10 @@ serve(async (req) => {
       .map((u: any) => `- ID: ${u.id} | Name: "${u.name}"`)
       .join("\n");
 
+    const existingTaskList = (existing_tasks || [])
+      .map((t: any) => `- "${t.description}" (project: ${t.project_id}, start: ${t.start_date || 'none'}, end: ${t.end_date || 'none'})`)
+      .join("\n");
+
     const stickerTexts = stickers
       .map((s: any, i: number) => `[Sticker ${i + 1}] (project: ${s.project_name || "none"}, created: ${s.created_at || "unknown"})\n${s.content}`)
       .join("\n---\n");
@@ -46,6 +50,9 @@ ${userList || "(none)"}
 
 Today's date: ${new Date().toISOString().slice(0, 10)}
 
+Already existing tasks in the system:
+${existingTaskList || "(none)"}
+
 Rules:
 - Extract deadlines (dates mentioned), tasks (action items), and assigned persons.
 - Match to existing projects and users by name when possible.
@@ -58,7 +65,21 @@ Rules:
   - If the sticker mentions a submission date, due date, or deadline for a task, use it as end_date.
   - If the sticker mentions a start date, use it as start_date.
   - If no start date is mentioned, leave start_date as null (the system will default to sticker creation date).
-  - If no end/due date is mentioned, leave end_date as null.`;
+  - If no end/due date is mentioned, leave end_date as null.
+
+IMPORTANT - Repeating deadlines:
+- When text mentions recurring patterns like "Every week", "Every Monday", "Bi-weekly", "Monthly", etc., you MUST expand them into MULTIPLE individual deadline entries.
+- For "Every week" or "Every Monday" type patterns: generate individual deadline entries for at least the next 4 weeks (or the number specified).
+- For "Every month" type patterns: generate individual deadline entries for the next 3 months (or the number specified).
+- Each expanded deadline must have its own specific date in YYYY-MM-DD format.
+- Example: "Submit report every Monday" → 4 separate deadlines for the next 4 Mondays.
+- If a range is specified (e.g., "Every Monday from Jan to March"), generate deadlines for that entire range.
+
+IMPORTANT - Existing task awareness:
+- Compare your extracted tasks against the "Already existing tasks" list above.
+- For each extracted task, set is_existing to true if a task with the same or very similar description already exists for the same project.
+- Two tasks are "the same" if their descriptions convey the same action/intent, even if worded slightly differently (e.g., "Review design docs" and "Review the design documents" are the same task).
+- If the task already exists but you found NEW date information (start_date or end_date that the existing task doesn't have), set has_new_dates to true.`;
 
     const userPrompt = `Analyze these stickers and extract deadlines, tasks, and assigned persons:\n\n${stickerTexts}`;
 
@@ -111,6 +132,8 @@ Rules:
                         source_sticker_index: { type: "number", description: "1-based sticker index" },
                         start_date: { type: "string", description: "YYYY-MM-DD start date or null" },
                         end_date: { type: "string", description: "YYYY-MM-DD end/due date or null" },
+                        is_existing: { type: "boolean", description: "True if this task already exists in the system" },
+                        has_new_dates: { type: "boolean", description: "True if existing task has new date info discovered" },
                       },
                       required: ["description", "source_sticker_index"],
                       additionalProperties: false,

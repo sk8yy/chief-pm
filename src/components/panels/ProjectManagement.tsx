@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addMonths, subMonths, eachWeekOfInterval, eachDayOfInterval } from 'date-fns';
 import { useAppContext } from '@/contexts/AppContext';
 import { useProjects, useUpdateProject } from '@/hooks/useProjects';
@@ -91,6 +91,38 @@ const ProjectManagement = () => {
     });
     return { planned, recorded };
   };
+
+  // Upsert weekly hours — distributes total evenly across 7 days
+  const handleWeekHoursChange = useCallback(async (userId: string, weekStart: Date, total: number, field: 'planned_hours' | 'recorded_hours') => {
+    if (!selectedProjectId) return;
+    const days = eachDayOfInterval({ start: weekStart, end: endOfWeek(weekStart, { weekStartsOn: 1 }) });
+    const perDay = Math.floor(total / 7);
+    const remainder = total - perDay * 7;
+    const rows = days.map((day, i) => {
+      const val = perDay + (i < remainder ? 1 : 0);
+      return {
+        user_id: userId,
+        project_id: selectedProjectId,
+        date: format(day, 'yyyy-MM-dd'),
+        planned_hours: field === 'planned_hours' ? val : undefined,
+        recorded_hours: field === 'recorded_hours' ? val : undefined,
+      };
+    });
+    // Upsert each day individually so we only update the target field
+    for (const row of rows) {
+      const updatePayload: Record<string, number> = {};
+      if (row.planned_hours !== undefined) updatePayload.planned_hours = row.planned_hours;
+      if (row.recorded_hours !== undefined) updatePayload.recorded_hours = row.recorded_hours;
+
+      await supabase.from('hours').upsert({
+        user_id: row.user_id,
+        project_id: row.project_id,
+        date: row.date,
+        ...updatePayload,
+      }, { onConflict: 'user_id,project_id,date' });
+    }
+    qc.invalidateQueries({ queryKey: ['all_hours'] });
+  }, [selectedProjectId, qc]);
 
   // Add member
   const handleAddMember = async (userId: string) => {
@@ -330,13 +362,48 @@ const ProjectManagement = () => {
                       userPlannedTotal += planned;
                       userRecordedTotal += recorded;
                       return (
-                        <div key={ws.toISOString()} className="px-1 py-1 text-center border-r tabular-nums text-xs">
+                        <div key={ws.toISOString()} className="px-0.5 py-0.5 text-center border-r tabular-nums text-xs flex flex-col gap-0.5 justify-center">
                           {mode === 'plan' ? (
-                            planned > 0 ? planned : ''
+                            <input
+                              type="number"
+                              min={0}
+                              defaultValue={planned || ''}
+                              placeholder="0"
+                              className="w-full text-center bg-transparent border border-transparent hover:border-border focus:border-ring focus:outline-none rounded px-1 py-0.5 text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                              onBlur={(e) => {
+                                const val = parseInt(e.target.value) || 0;
+                                if (val !== planned) handleWeekHoursChange(user.id, ws, val, 'planned_hours');
+                              }}
+                              onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                            />
                           ) : (
                             <>
-                              {planned > 0 && <span className="text-muted-foreground">{planned}</span>}
-                              {recorded > 0 && <span className="ml-1 font-semibold">{recorded}</span>}
+                              <input
+                                type="number"
+                                min={0}
+                                defaultValue={planned || ''}
+                                placeholder="P"
+                                title="Planned"
+                                className="w-full text-center bg-transparent border border-transparent hover:border-border focus:border-ring focus:outline-none rounded px-1 py-0 text-[10px] text-muted-foreground [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                onBlur={(e) => {
+                                  const val = parseInt(e.target.value) || 0;
+                                  if (val !== planned) handleWeekHoursChange(user.id, ws, val, 'planned_hours');
+                                }}
+                                onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                              />
+                              <input
+                                type="number"
+                                min={0}
+                                defaultValue={recorded || ''}
+                                placeholder="A"
+                                title="Actual"
+                                className="w-full text-center bg-transparent border border-transparent hover:border-border focus:border-ring focus:outline-none rounded px-1 py-0 text-[10px] font-semibold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                onBlur={(e) => {
+                                  const val = parseInt(e.target.value) || 0;
+                                  if (val !== recorded) handleWeekHoursChange(user.id, ws, val, 'recorded_hours');
+                                }}
+                                onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                              />
                             </>
                           )}
                         </div>

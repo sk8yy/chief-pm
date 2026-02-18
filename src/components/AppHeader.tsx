@@ -42,76 +42,78 @@ const AppHeader = () => {
   };
 
   return (
-    <header className="flex items-center justify-between border-b bg-card px-4 py-2 gap-4">
-      <div className="flex items-center gap-2">
-        <Button variant="ghost" size="sm" onClick={() => navigate('/')} className="gap-1.5">
-          <LogOut className="h-4 w-4" />
-          <span className="hidden sm:inline">Exit</span>
-        </Button>
-        {currentWorkspace && (
-          editingName ? (
-            <Input
-              value={nameValue}
-              onChange={(e) => setNameValue(e.target.value)}
-              onBlur={saveName}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') saveName();
-                if (e.key === 'Escape') setEditingName(false);
-              }}
-              className="h-7 w-40 text-sm border-l ml-1"
-              autoFocus
-            />
-          ) : (
-            <span
-              className="text-sm font-medium text-muted-foreground border-l pl-2 ml-1 cursor-pointer hover:text-foreground"
-              onDoubleClick={startEditing}
-              title="Double-click to rename"
-            >
-              {currentWorkspace.name}
-            </span>
-          )
-        )}
-      </div>
-
-      <nav className="flex items-center gap-1">
-        {panels.map((p) => (
-          <Button
-            key={p.key}
-            variant={activePanel === p.key ? 'default' : 'ghost'}
-            size="sm"
-            onClick={() => setActivePanel(p.key)}
-            className="gap-1.5"
-          >
-            {p.icon}
-            <span className="hidden sm:inline">{p.label}</span>
+    <header className="border-b bg-card">
+      <div className="container mx-auto flex items-center justify-between px-4 py-2 gap-4 max-w-7xl">
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={() => navigate('/')} className="gap-1.5">
+            <LogOut className="h-4 w-4" />
+            <span className="hidden sm:inline">Exit</span>
           </Button>
-        ))}
-      </nav>
+          {currentWorkspace && (
+            editingName ? (
+              <Input
+                value={nameValue}
+                onChange={(e) => setNameValue(e.target.value)}
+                onBlur={saveName}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') saveName();
+                  if (e.key === 'Escape') setEditingName(false);
+                }}
+                className="h-7 w-40 text-sm border-l ml-1"
+                autoFocus
+              />
+            ) : (
+              <span
+                className="text-sm font-medium text-muted-foreground border-l pl-2 ml-1 cursor-pointer hover:text-foreground"
+                onDoubleClick={startEditing}
+                title="Double-click to rename"
+              >
+                {currentWorkspace.name}
+              </span>
+            )
+          )}
+        </div>
 
-      <div className="flex items-center gap-4">
-        {activePanel !== 'sticker' && (
-          <div className="flex items-center gap-2 text-sm">
-            <span className={mode === 'plan' ? 'font-semibold text-foreground' : 'text-muted-foreground'}>Plan</span>
-            <Switch
-              checked={mode === 'record'}
-              onCheckedChange={(checked) => setMode(checked ? 'record' : 'plan')}
-            />
-            <span className={mode === 'record' ? 'font-semibold text-foreground' : 'text-muted-foreground'}>Record</span>
-          </div>
-        )}
+        <nav className="flex items-center gap-1">
+          {panels.map((p) => (
+            <Button
+              key={p.key}
+              variant={activePanel === p.key ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setActivePanel(p.key)}
+              className="gap-1.5"
+            >
+              {p.icon}
+              <span className="hidden sm:inline">{p.label}</span>
+            </Button>
+          ))}
+        </nav>
 
-        {(activePanel === 'personal' || activePanel === 'sticker') && (
-          <Select value={currentUserId ?? ''} onValueChange={setCurrentUserId}>
-            <SelectTrigger className="w-[140px] h-8">
-              <SelectValue placeholder="Select user" />
-            </SelectTrigger>
-            <SelectContent>
-              {users?.map((u) => (
-                <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
+        <div className="flex items-center gap-4">
+          {activePanel !== 'sticker' && (
+            <div className="flex items-center gap-2 text-sm">
+              <span className={mode === 'plan' ? 'font-semibold text-foreground' : 'text-muted-foreground'}>Plan</span>
+              <Switch
+                checked={mode === 'record'}
+                onCheckedChange={(checked) => setMode(checked ? 'record' : 'plan')}
+              />
+              <span className={mode === 'record' ? 'font-semibold text-foreground' : 'text-muted-foreground'}>Record</span>
+            </div>
+          )}
+
+          {(activePanel === 'personal' || activePanel === 'sticker') && (
+            <Select value={currentUserId ?? ''} onValueChange={setCurrentUserId}>
+              <SelectTrigger className="w-[140px] h-8">
+                <SelectValue placeholder="Select user" />
+              </SelectTrigger>
+              <SelectContent>
+                {users?.map((u) => (
+                  <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
       </div>
     </header>
   );

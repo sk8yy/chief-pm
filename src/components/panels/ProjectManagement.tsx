@@ -126,8 +126,18 @@ const ProjectManagement = () => {
     // Upsert each day individually so we only update the target field
     for (const row of rows) {
       const updatePayload: Record<string, number> = {};
-      if (row.planned_hours !== undefined) updatePayload.planned_hours = row.planned_hours;
-      if (row.recorded_hours !== undefined) updatePayload.recorded_hours = row.recorded_hours;
+      
+      // If updating planned_hours, sync it to recorded_hours (Plan -> Record sync)
+      if (row.planned_hours !== undefined) {
+        updatePayload.planned_hours = row.planned_hours;
+        if (field === 'planned_hours') {
+          updatePayload.recorded_hours = row.planned_hours;
+        }
+      }
+      
+      if (row.recorded_hours !== undefined) {
+        updatePayload.recorded_hours = row.recorded_hours;
+      }
 
       await supabase.from('hours').upsert({
         user_id: row.user_id,

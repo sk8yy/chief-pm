@@ -16,7 +16,13 @@ export function useAllHours(dateRange: { start: string; end: string }) {
       if (workspaceId) q = q.eq('workspace_id', workspaceId);
       const { data, error } = await q;
       if (error) throw error;
-      return data;
+      
+      // Auto-sync: if recorded_hours is null, use planned_hours as default
+      // This ensures existing Plan Mode data appears in Record Mode
+      return data?.map((hour) => ({
+        ...hour,
+        recorded_hours: hour.recorded_hours ?? hour.planned_hours,
+      }));
     },
   });
 }
